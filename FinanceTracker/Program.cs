@@ -1,4 +1,14 @@
+using FinanceTracker.Infrastructure.Persistence;
+using FinanceTracker.Application.Services;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<FinanceTrackerContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("FinanceTrackerDB")));
+
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<ICategoryService, CategoryService>();
 
 // Add services to the container.
 

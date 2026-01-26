@@ -1,8 +1,7 @@
 using System.ComponentModel.DataAnnotations;
-using FinanceTracker.Domain;
 using FinanceTracker.Domain.Entities;
 
-namespace FinanceTracker.Dtos
+namespace FinanceTracker.Application.Dtos
 {
     public class CreateCategoryDto
     {
