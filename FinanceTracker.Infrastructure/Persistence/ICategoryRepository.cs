@@ -6,5 +6,7 @@ namespace FinanceTracker.Infrastructure.Persistence
     {
         Task<Category> AddAsync(Category category);
         Task<Category?> GetByIdAsync(Guid id);
+        Task<List<Category>> GetAllAsync();
+        Task<List<Category>> GetByTypeAsync(CategoryTypes type);
     }
 }

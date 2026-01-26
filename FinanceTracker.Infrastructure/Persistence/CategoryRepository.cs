@@ -23,5 +23,17 @@ namespace FinanceTracker.Infrastructure.Persistence
         {
             return await _context.Categories.FindAsync(id);
         }
+
+        public async Task<List<Category>> GetAllAsync()
+        {
+            return await _context.Categories.AsNoTracking().ToListAsync();
+        }
+
+        public async Task<List<Category>> GetByTypeAsync(CategoryTypes type)
+        {
+            return await _context.Categories.AsNoTracking()
+                .Where(c => c.CategoryType == type)
+                .ToListAsync();
+        }
     }
 }

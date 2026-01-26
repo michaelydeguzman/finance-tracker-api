@@ -14,13 +14,22 @@ namespace FinanceTracker.Application.Services
 
         public async Task<Category> AddCategoryAsync(Category category)
         {
-            // Business rules can be added here
             return await _repository.AddAsync(category);
         }
 
         public async Task<Category?> GetCategoryByIdAsync(Guid id)
         {
             return await _repository.GetByIdAsync(id);
+        }
+
+        public async Task<List<Category>> GetAllAsync()
+        {
+            return await _repository.GetAllAsync();
+        }
+
+        public async Task<List<Category>> GetByTypeAsync(CategoryTypes type)
+        {
+            return await _repository.GetByTypeAsync(type);
         }
     }
 }

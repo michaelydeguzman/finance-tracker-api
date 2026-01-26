@@ -43,5 +43,18 @@ namespace FinanceTracker.Controllers
                 return NotFound();
             return category;
         }
+
+        [HttpGet]
+        public async Task<ActionResult<List<Category>>> GetCategories([FromQuery] CategoryTypes? type)
+        {
+            if (type.HasValue)
+            {
+                var filtered = await _categoryService.GetByTypeAsync(type.Value);
+                return Ok(filtered);
+            }
+
+            var all = await _categoryService.GetAllAsync();
+            return Ok(all);
+        }
     }
-}
+}   
