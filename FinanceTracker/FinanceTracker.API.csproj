@@ -10,8 +10,4 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Finance.Tracker.Domain\FinanceTracker.Domain.csproj" />
-  </ItemGroup>
-
 </Project>
