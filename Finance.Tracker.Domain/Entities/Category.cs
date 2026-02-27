@@ -2,7 +2,7 @@
 
 namespace FinanceTracker.Domain.Entities
 {
-    public enum CategoryTypes
+    public enum CategoryType
     {
         Income,
         Expense
@@ -18,7 +18,7 @@ namespace FinanceTracker.Domain.Entities
         public string Name { get; set; } = string.Empty;
         
         [Required]
-        public CategoryTypes CategoryType { get; set; }
+        public CategoryType CategoryType { get; set; }
         
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         

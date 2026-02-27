@@ -2,18 +2,24 @@ using Microsoft.AspNetCore.Mvc;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Application.Services;
 using FinanceTracker.Application.Dtos;
+using Asp.Versioning;
+using MediatR;
+using FinanceTracker.Application.Features.Categories.Queries.GetCategories;
 
 namespace FinanceTracker.Controllers
 {
+    [ApiVersion("1.0")]
     [ApiController]
-    [Route("[controller]")]
-    public class CategoriesController : ControllerBase
+    [Route("api/v{version:apiVersion}/categories")]
+    public class CategoriesV1Controller : ControllerBase
     {
         private readonly ICategoryService _categoryService;
+        private readonly ISender _sender;
 
-        public CategoriesController(ICategoryService categoryService)
+        public CategoriesV1Controller(ICategoryService categoryService, ISender sender)
         {
             _categoryService = categoryService;
+            _sender = sender;
         }
 
         [HttpPost]
@@ -45,16 +51,10 @@ namespace FinanceTracker.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<Category>>> GetCategories([FromQuery] CategoryTypes? type)
+        public async Task<ActionResult<List<Category>>> GetCategories([FromQuery] CategoryType? type)
         {
-            if (type.HasValue)
-            {
-                var filtered = await _categoryService.GetByTypeAsync(type.Value);
-                return Ok(filtered);
-            }
-
-            var all = await _categoryService.GetAllAsync();
-            return Ok(all);
+            var categories = await _sender.Send(new GetCategoriesQuery(type));
+            return Ok(categories);
         }
     }
-}   
+}

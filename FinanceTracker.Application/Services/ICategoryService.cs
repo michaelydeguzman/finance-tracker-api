@@ -7,6 +7,6 @@ namespace FinanceTracker.Application.Services
         Task<Category> AddCategoryAsync(Category category);
         Task<Category?> GetCategoryByIdAsync(Guid id);
         Task<List<Category>> GetAllAsync();
-        Task<List<Category>> GetByTypeAsync(CategoryTypes type);
+        Task<List<Category>> GetByTypeAsync(CategoryType type);
     }
 }

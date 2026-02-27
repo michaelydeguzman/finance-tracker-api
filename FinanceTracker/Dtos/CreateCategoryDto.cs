@@ -9,6 +9,6 @@ namespace FinanceTracker.Dtos
         [Required]
         public string Name { get; set; } = string.Empty;
         [Required]
-        public CategoryTypes CategoryType { get; set; }
+        public CategoryType CategoryType { get; set; }
     }
 }

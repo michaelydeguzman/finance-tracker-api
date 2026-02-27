@@ -27,7 +27,7 @@ namespace FinanceTracker.Application.Services
             return await _repository.GetAllAsync();
         }
 
-        public async Task<List<Category>> GetByTypeAsync(CategoryTypes type)
+        public async Task<List<Category>> GetByTypeAsync(CategoryType type)
         {
             return await _repository.GetByTypeAsync(type);
         }
