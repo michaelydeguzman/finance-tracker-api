@@ -492,3 +492,7 @@ FinanceTracker/bin/Debug/net8.0/Microsoft.Extensions.DependencyInjection.Abstrac
 FinanceTracker/bin/Debug/net8.0/Microsoft.Extensions.Logging.Abstractions.dll
 FinanceTracker/bin/Debug/net8.0/System.Diagnostics.DiagnosticSource.dll
 FinanceTracker/obj/Debug/net8.0/FinanceTracker.API.csproj.BuildWithSkipAnalyzers
+FinanceTracker/.vs/FinanceTracker.API/FileContentIndex/5f269402-acdf-4f47-afb8-335a3739af80.vsidx
+FinanceTracker/.vs/ProjectEvaluation/financetracker.api.metadata.v6.1
+FinanceTracker/.vs/ProjectEvaluation/financetracker.api.projects.v6.1
+FinanceTracker/.vs/FinanceTracker.API/FileContentIndex/read.lock
