@@ -496,3 +496,7 @@ FinanceTracker/.vs/FinanceTracker.API/FileContentIndex/5f269402-acdf-4f47-afb8-3
 FinanceTracker/.vs/ProjectEvaluation/financetracker.api.metadata.v6.1
 FinanceTracker/.vs/ProjectEvaluation/financetracker.api.projects.v6.1
 FinanceTracker/.vs/FinanceTracker.API/FileContentIndex/read.lock
+Finance.Tracker.Domain/obj/Debug/net8.0/FinanceTracker.Domain.csproj.BuildWithSkipAnalyzers
+FinanceTracker.Application/obj/Debug/net8.0/FinanceTracker.Application.csproj.BuildWithSkipAnalyzers
+FinanceTracker.Infrastructure/obj/Debug/net8.0/FinanceTracker.Infrastructure.csproj.BuildWithSkipAnalyzers
+FinanceTracker/.vs/FinanceTracker.API/FileContentIndex/139c019e-1866-479d-90d6-68013e18bdfa.vsidx
