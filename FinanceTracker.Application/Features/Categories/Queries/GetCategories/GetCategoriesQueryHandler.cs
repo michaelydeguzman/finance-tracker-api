@@ -1,10 +1,10 @@
+using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Services;
-using FinanceTracker.Domain.Entities;
 using MediatR;
 
 namespace FinanceTracker.Application.Features.Categories.Queries.GetCategories;
 
-public sealed class GetCategoriesQueryHandler : IRequestHandler<GetCategoriesQuery, List<Category>>
+public sealed class GetCategoriesQueryHandler : IRequestHandler<GetCategoriesQuery, List<CategoryResponseDto>>
 {
     private readonly ICategoryService _categoryService;
 
@@ -13,13 +13,12 @@ public sealed class GetCategoriesQueryHandler : IRequestHandler<GetCategoriesQue
         _categoryService = categoryService;
     }
 
-    public async Task<List<Category>> Handle(GetCategoriesQuery request, CancellationToken cancellationToken)
+    public async Task<List<CategoryResponseDto>> Handle(GetCategoriesQuery request, CancellationToken cancellationToken)
     {
-        if (request.Type.HasValue)
-        {
-            return await _categoryService.GetByTypeAsync(request.Type.Value);
-        }
+        var categories = request.Type.HasValue
+            ? await _categoryService.GetByTypeAsync(request.Type.Value)
+            : await _categoryService.GetAllAsync();
 
-        return await _categoryService.GetAllAsync();
+        return categories.Select(CategoryResponseDto.FromEntity).ToList();
     }
 }

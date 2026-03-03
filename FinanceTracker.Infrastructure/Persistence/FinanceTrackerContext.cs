@@ -11,8 +11,9 @@ namespace FinanceTracker.Infrastructure.Persistence
 
         public DbSet<Category> Categories { get; set; }
         public DbSet<Frequency> Frequencies { get; set; }
+        public DbSet<Transaction> Transactions { get; set; }
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder)  
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 

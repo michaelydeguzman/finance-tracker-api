@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace FinanceTracker.Domain.Entities
 {
@@ -23,12 +24,7 @@ namespace FinanceTracker.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         
         public bool IsActive { get; set; } = true;
-        
-        // Optional Recurring configuration
-        
-        public Guid? FrequencyId { get; set; }
-        
-        // Navigation property
-        public Frequency? Frequency { get; set; }
+
+        public ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
     }
 }

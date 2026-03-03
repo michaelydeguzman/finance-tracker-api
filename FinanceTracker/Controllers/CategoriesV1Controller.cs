@@ -1,10 +1,11 @@
-using Microsoft.AspNetCore.Mvc;
-using FinanceTracker.Domain.Entities;
-using FinanceTracker.Application.Services;
-using FinanceTracker.Application.Dtos;
 using Asp.Versioning;
-using MediatR;
+using FinanceTracker.Application.Dtos;
+using FinanceTracker.Application.Dtos.Responses;
+using FinanceTracker.Application.Features.Categories.Commands.CreateCategory;
 using FinanceTracker.Application.Features.Categories.Queries.GetCategories;
+using FinanceTracker.Application.Features.Categories.Queries.GetCategoryById;
+using MediatR;
+using Microsoft.AspNetCore.Mvc;
 
 namespace FinanceTracker.Controllers
 {
@@ -13,48 +14,38 @@ namespace FinanceTracker.Controllers
     [Route("api/v{version:apiVersion}/categories")]
     public class CategoriesV1Controller : ControllerBase
     {
-        private readonly ICategoryService _categoryService;
         private readonly ISender _sender;
 
-        public CategoriesV1Controller(ICategoryService categoryService, ISender sender)
+        public CategoriesV1Controller(ISender sender)
         {
-            _categoryService = categoryService;
             _sender = sender;
         }
 
         [HttpPost]
-        public async Task<ActionResult<Category>> AddCategory([FromBody] CreateCategoryDto dto)
+        public async Task<ActionResult<ApiResponseDto<CategoryResponseDto>>> AddCategory([FromBody] CreateCategoryDto dto)
         {
             if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+                return BadRequest(ApiResponseDto<CategoryResponseDto>.Fail("Invalid request payload."));
 
-            var category = new Category
-            {
-                Id = Guid.NewGuid(),
-                Name = dto.Name,
-                CategoryType = dto.CategoryType,
-                CreatedAt = DateTime.UtcNow,
-                IsActive = true
-            };
-
-            var created = await _categoryService.AddCategoryAsync(category);
-            return CreatedAtAction(nameof(GetCategoryById), new { id = created.Id }, created);
+            var response = await _sender.Send(new CreateCategoryCommand(dto));
+            return CreatedAtAction(nameof(GetCategoryById), new { id = response.Id }, ApiResponseDto<CategoryResponseDto>.Ok(response));
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<Category>> GetCategoryById(Guid id)
+        public async Task<ActionResult<ApiResponseDto<CategoryResponseDto>>> GetCategoryById(Guid id)
         {
-            var category = await _categoryService.GetCategoryByIdAsync(id);
+            var category = await _sender.Send(new GetCategoryByIdQuery(id));
             if (category == null)
-                return NotFound();
-            return category;
+                return NotFound(ApiResponseDto<CategoryResponseDto>.Fail("Category not found."));
+
+            return Ok(ApiResponseDto<CategoryResponseDto>.Ok(category));
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<Category>>> GetCategories([FromQuery] CategoryType? type)
+        public async Task<ActionResult<ApiResponseDto<List<CategoryResponseDto>>>> GetCategories([FromQuery] global::FinanceTracker.Domain.Entities.CategoryType? type)
         {
             var categories = await _sender.Send(new GetCategoriesQuery(type));
-            return Ok(categories);
+            return Ok(ApiResponseDto<List<CategoryResponseDto>>.Ok(categories));
         }
     }
 }

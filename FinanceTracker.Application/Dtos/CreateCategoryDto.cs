@@ -7,6 +7,7 @@ namespace FinanceTracker.Application.Dtos
     {
         [Required]
         public string Name { get; set; } = string.Empty;
+
         [Required]
         public CategoryType CategoryType { get; set; }
     }

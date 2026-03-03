@@ -11,6 +11,8 @@ builder.Services.AddDbContext<FinanceTrackerContext>(options =>
 
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
+builder.Services.AddScoped<IFrequencyRepository, FrequencyRepository>();
+builder.Services.AddScoped<IFrequencyService, FrequencyService>();
 
 // Add services to the container.
 

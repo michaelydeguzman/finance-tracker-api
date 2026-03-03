@@ -1,6 +1,7 @@
+using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Domain.Entities;
 using MediatR;
 
 namespace FinanceTracker.Application.Features.Categories.Queries.GetCategories;
 
-public sealed record GetCategoriesQuery(CategoryType? Type) : IRequest<List<Category>>;
+public sealed record GetCategoriesQuery(CategoryType? Type) : IRequest<List<CategoryResponseDto>>;

@@ -26,11 +26,6 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
                 .HasDefaultValue(true);
 
             builder.HasIndex(e => e.CategoryType);
-
-            builder.HasOne(e => e.Frequency)
-                .WithMany(f => f.Categories)
-                .HasForeignKey(e => e.FrequencyId)
-                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }
