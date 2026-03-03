@@ -1,6 +1,6 @@
-using FinanceTracker.Infrastructure.Persistence;
 using FinanceTracker.Application.Services;
 using FinanceTracker.Application.Features.Categories.Queries.GetCategories;
+using FinanceTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Asp.Versioning;
 
@@ -13,6 +13,8 @@ builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IFrequencyRepository, FrequencyRepository>();
 builder.Services.AddScoped<IFrequencyService, FrequencyService>();
+builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
+builder.Services.AddScoped<ITransactionService, TransactionService>();
 
 // Add services to the container.
 
