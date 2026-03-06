@@ -31,5 +31,22 @@ namespace FinanceTracker.Application.Services
         {
             return await _repository.GetByTypeAsync(type);
         }
+
+        public async Task<bool> DeleteCategoryAsync(Guid id)
+        {
+            return await _repository.DeleteAsync(id);
+        }
+
+        public async Task<Category?> UpdateCategoryAsync(Guid id, string name, CategoryType categoryType)
+        {
+            var category = await _repository.GetByIdAsync(id);
+            if (category is null)
+                return null;
+
+            category.Name = name;
+            category.CategoryType = categoryType;
+
+            return await _repository.UpdateAsync(category);
+        }
     }
 }
