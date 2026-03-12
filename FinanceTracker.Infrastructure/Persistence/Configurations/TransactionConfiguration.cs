@@ -21,6 +21,9 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
                 .IsRequired()
                 .HasPrecision(18, 2);
 
+            builder.Property(e => e.TransactionDate)
+                .IsRequired();
+
             builder.HasOne(e => e.Category)
                 .WithMany(category => category.Transactions)
                 .HasForeignKey(e => e.CategoryId)
@@ -36,6 +39,7 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
 
             builder.HasIndex(e => e.CategoryId);
             builder.HasIndex(e => e.FrequencyId);
+            builder.HasIndex(e => e.TransactionDate);
             builder.HasIndex(e => e.CreatedAt);
         }
     }

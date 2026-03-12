@@ -24,12 +24,15 @@ public sealed class CreateTransactionCommandHandler : IRequestHandler<CreateTran
             Category = null!,
             Description = request.Dto.Description ?? string.Empty,
             Amount = request.Dto.Amount,
+            TransactionDate = request.Dto.TransactionDate,
             FrequencyId = request.Dto.FrequencyId,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = request.Dto.CreatedBy
         };
 
         var created = await _transactionService.AddTransactionAsync(transaction);
-        return TransactionResponseDto.FromEntity(created);
+        var createdWithRelations = await _transactionService.GetByIdAsync(created.Id);
+
+        return TransactionResponseDto.FromEntity(createdWithRelations ?? created);
     }
 }

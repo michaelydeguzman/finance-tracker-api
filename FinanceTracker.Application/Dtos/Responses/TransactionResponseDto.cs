@@ -8,8 +8,10 @@ public sealed class TransactionResponseDto
     public string Name { get; init; } = string.Empty;
     public Guid CategoryId { get; init; }
     public string CategoryName { get; init; } = string.Empty;
+    public string CategoryType { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
     public decimal Amount { get; init; }
+    public DateTime TransactionDate { get; init; }
     public Guid? FrequencyId { get; init; }
     public string? FrequencyName { get; init; }
     public DateTime CreatedAt { get; init; }
@@ -22,8 +24,10 @@ public sealed class TransactionResponseDto
             Name = transaction.Name,
             CategoryId = transaction.CategoryId,
             CategoryName = transaction.Category?.Name ?? string.Empty,
+            CategoryType = transaction.Category?.CategoryType.ToString() ?? string.Empty,
             Description = transaction.Description,
             Amount = transaction.Amount,
+            TransactionDate = transaction.TransactionDate,
             FrequencyId = transaction.FrequencyId,
             FrequencyName = transaction.Frequency?.Name,
             CreatedAt = transaction.CreatedAt,

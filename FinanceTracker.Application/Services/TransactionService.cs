@@ -17,6 +17,11 @@ public class TransactionService : ITransactionService
         return await _repository.AddAsync(transaction);
     }
 
+    public async Task<Transaction?> GetByIdAsync(Guid id)
+    {
+        return await _repository.GetByIdAsync(id);
+    }
+
     public async Task<List<Transaction>> GetAllAsync()
     {
         return await _repository.GetAllAsync();
