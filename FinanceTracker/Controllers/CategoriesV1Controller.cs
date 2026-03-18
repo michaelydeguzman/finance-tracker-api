@@ -6,6 +6,7 @@ using FinanceTracker.Application.Features.Categories.Commands.DeleteCategory;
 using FinanceTracker.Application.Features.Categories.Commands.UpdateCategory;
 using FinanceTracker.Application.Features.Categories.Queries.GetCategories;
 using FinanceTracker.Application.Features.Categories.Queries.GetCategoryById;
+using FinanceTracker.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -67,9 +68,9 @@ namespace FinanceTracker.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<ApiResponseDto<List<CategoryResponseDto>>>> GetCategories([FromQuery] global::FinanceTracker.Domain.Entities.CategoryType? type)
+        public async Task<ActionResult<ApiResponseDto<List<CategoryResponseDto>>>> GetCategories([FromQuery] CategoryType? categoryType)
         {
-            var categories = await _sender.Send(new GetCategoriesQuery(type));
+            var categories = await _sender.Send(new GetCategoriesQuery(categoryType));
             return Ok(ApiResponseDto<List<CategoryResponseDto>>.Ok(categories));
         }
     }

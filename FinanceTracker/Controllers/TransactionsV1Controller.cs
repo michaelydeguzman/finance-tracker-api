@@ -3,6 +3,7 @@ using FinanceTracker.Application.Dtos;
 using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Features.Transactions.Commands.CreateTransaction;
 using FinanceTracker.Application.Features.Transactions.Queries.GetAllTransactions;
+using FinanceTracker.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -31,9 +32,9 @@ public class TransactionsV1Controller : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<ApiResponseDto<List<TransactionResponseDto>>>> GetAllTransactions()
+    public async Task<ActionResult<ApiResponseDto<List<TransactionResponseDto>>>> GetTransactions([FromQuery] CategoryType? categoryType)
     {
-        var transactions = await _sender.Send(new GetAllTransactionsQuery());
+        var transactions = await _sender.Send(new GetAllTransactionsQuery(categoryType));
         return Ok(ApiResponseDto<List<TransactionResponseDto>>.Ok(transactions));
     }
 }
