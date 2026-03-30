@@ -2,6 +2,8 @@ using Asp.Versioning;
 using FinanceTracker.Application.Dtos;
 using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Features.Transactions.Commands.CreateTransaction;
+using FinanceTracker.Application.Features.Transactions.Commands.DeleteTransaction;
+using FinanceTracker.Application.Features.Transactions.Commands.UpdateTransaction;
 using FinanceTracker.Application.Features.Transactions.Queries.GetAllTransactions;
 using FinanceTracker.Domain.Entities;
 using MediatR;
@@ -29,6 +31,29 @@ public class TransactionsV1Controller : ControllerBase
 
         var response = await _sender.Send(new CreateTransactionCommand(dto));
         return Created(string.Empty, ApiResponseDto<TransactionResponseDto>.Ok(response));
+    }
+
+    [HttpPut("{id}")]
+    public async Task<ActionResult<ApiResponseDto<TransactionResponseDto>>> UpdateTransaction(Guid id, [FromBody] UpdateTransactionDto dto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ApiResponseDto<TransactionResponseDto>.Fail("Invalid request payload."));
+
+        var updated = await _sender.Send(new UpdateTransactionCommand(id, dto));
+        if (updated is null)
+            return NotFound(ApiResponseDto<TransactionResponseDto>.Fail("Transaction not found."));
+
+        return Ok(ApiResponseDto<TransactionResponseDto>.Ok(updated));
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<ActionResult<ApiResponseDto<string>>> DeleteTransaction(Guid id)
+    {
+        var deleted = await _sender.Send(new DeleteTransactionCommand(id));
+        if (!deleted)
+            return NotFound(ApiResponseDto<string>.Fail("Transaction not found."));
+
+        return Ok(ApiResponseDto<string>.Ok("Transaction deleted successfully."));
     }
 
     [HttpGet]

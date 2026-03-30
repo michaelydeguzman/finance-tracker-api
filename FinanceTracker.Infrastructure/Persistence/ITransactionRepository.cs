@@ -7,5 +7,7 @@ namespace FinanceTracker.Infrastructure.Persistence
         Task<Transaction> AddAsync(Transaction transaction);
         Task<Transaction?> GetByIdAsync(Guid id);
         Task<List<Transaction>> GetAllAsync();
+        Task<Transaction?> UpdateAsync(Transaction transaction);
+        Task<bool> DeleteAsync(Guid id);
     }
 }

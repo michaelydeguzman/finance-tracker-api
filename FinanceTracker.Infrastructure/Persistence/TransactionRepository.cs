@@ -37,5 +37,33 @@ namespace FinanceTracker.Infrastructure.Persistence
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync();
         }
+
+        public async Task<Transaction?> UpdateAsync(Transaction transaction)
+        {
+            var entity = await _context.Transactions.FindAsync(transaction.Id);
+            if (entity is null)
+                return null;
+
+            entity.Name = transaction.Name;
+            entity.CategoryId = transaction.CategoryId;
+            entity.Description = transaction.Description;
+            entity.Amount = transaction.Amount;
+            entity.TransactionDate = transaction.TransactionDate;
+            entity.FrequencyId = transaction.FrequencyId;
+
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<bool> DeleteAsync(Guid id)
+        {
+            var entity = await _context.Transactions.FindAsync(id);
+            if (entity is null)
+                return false;
+
+            _context.Transactions.Remove(entity);
+            await _context.SaveChangesAsync();
+            return true;
+        }
     }
 }
