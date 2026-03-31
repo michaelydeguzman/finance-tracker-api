@@ -1,0 +1,148 @@
+<!-- gsd-project-start source:PROJECT.md -->
+## Project
+
+**Finance Tracker API**
+
+An ASP.NET Core (.NET 8) REST API for tracking personal finances. It exposes versioned endpoints to manage finance data (e.g. transactions, categories, frequencies) backed by SQL Server via EF Core.
+
+**Core Value:** Users can reliably record and retrieve transactions with flexible filtering for reporting and UI views.
+
+### Constraints
+
+- **Backward compatibility**: existing callers of `GET /transactions` without pagination params must still receive full list
+- **Performance**: paging must have stable ordering; paged responses include `totalCount`
+- **API contract**: pagination is 1-based; `pageSize` must not exceed 20
+<!-- gsd-project-end -->
+
+<!-- gsd-stack-start source:codebase/STACK.md -->
+## Technology Stack
+
+## Languages and runtime
+- **Language:** C# with **nullable reference types** and **implicit usings** enabled on all projects.
+- **Runtime / SDK:** `net8.0` (`TargetFramework` in every `.csproj`).
+- **Entry assembly:** ASP.NET Core minimal hosting + top-level statements in `FinanceTracker/Program.cs`.
+## Solution and project layout
+- **Solution file:** `FinanceTracker/FinanceTracker.API.sln` — includes API, Domain, Application, Infrastructure, and Tests.
+- **`FinanceTracker/FinanceTracker.API.csproj`** — ASP.NET Core Web SDK; hosts controllers, versioning, Swagger, MediatR discovery, and EF Core SQL Server registration.
+- **`FinanceTracker.Application/FinanceTracker.Application.csproj`** — MediatR-only NuGet dependency; CQRS-style features under `FinanceTracker.Application/Features/...`, DTOs, and application services.
+- **`FinanceTracker.Infrastructure/FinanceTracker.Infrastructure.csproj`** — EF Core + SQL Server provider; persistence (`FinanceTracker.Infrastructure/Persistence/FinanceTrackerContext.cs`), entity configurations, repositories, and `FinanceTracker.Infrastructure/Migrations/`.
+- **Domain (active):** `Finance.Tracker.Domain/FinanceTracker.Domain.csproj` — zero third-party packages; entities such as `FinanceTracker.Domain.Entities.Category` live here and are referenced by Application and Infrastructure.
+- **Domain (inactive in build graph):** `FinanceTracker.Domain/` contains alternate/legacy entity files and **is not referenced** by the solution’s `.csproj` files; the live domain is **`Finance.Tracker.Domain/`** only.
+## Frameworks and libraries (NuGet)
+| Area | Package | Where used |
+|------|---------|------------|
+| Web API | `Microsoft.NET.Sdk.Web` | `FinanceTracker/FinanceTracker.API.csproj` |
+| API versioning | `Asp.Versioning.Mvc` @ 8.1.1, `Asp.Versioning.Mvc.ApiExplorer` @ 8.1.1 | `FinanceTracker/Program.cs` (`AddApiVersioning` / `AddMvc` / `AddApiExplorer`) |
+| Mediator | `MediatR` @ 14.0.0 | API + Application; registration via `typeof(GetCategoriesQuery).Assembly` in `FinanceTracker/Program.cs` |
+| ORM | `Microsoft.EntityFrameworkCore` @ 8.0.0, `Microsoft.EntityFrameworkCore.SqlServer` @ 8.0.0 | API + Infrastructure; `UseSqlServer` in `Program.cs`, `FinanceTrackerContext` in Infrastructure |
+| EF tooling | `Microsoft.EntityFrameworkCore.Design`, `Microsoft.EntityFrameworkCore.Tools` (PrivateAssets) | API + Infrastructure — migrations and design-time |
+| OpenAPI | `Swashbuckle.AspNetCore` @ 6.6.2 | `FinanceTracker/Program.cs` — `AddEndpointsApiExplorer`, `AddSwaggerGen`, dev-only `UseSwagger` / `UseSwaggerUI` |
+| Testing | `xunit`, `FluentAssertions`, `Moq`, `Microsoft.AspNetCore.Mvc.Testing`, `Microsoft.EntityFrameworkCore.InMemory`, `coverlet.collector` | `FinanceTracker.Tests/FinanceTracker.Tests.csproj` |
+## Configuration files (concrete paths)
+- **`FinanceTracker/appsettings.json`** — `Logging`, `AllowedHosts`, `ConnectionStrings:FinanceTrackerDB` (SQL Server; **should be overridden via User Secrets or environment in real deployments**).
+- **`FinanceTracker/appsettings.Development.json`** — development logging overrides only.
+- **`FinanceTracker/Properties/launchSettings.json`** — Kestrel URLs (`http://localhost:5185`, `https://localhost:7203`), `ASPNETCORE_ENVIRONMENT`, Swagger as `launchUrl`, IIS Express profile.
+- **`FinanceTracker/FinanceTracker.http`** — sample HTTP file (e.g. `weatherforecast` placeholder host `http://localhost:5185`).
+## Dependency injection (host assembly)
+- `FinanceTrackerContext` with `UseSqlServer` and `GetConnectionString("FinanceTrackerDB")`.
+- Scoped pairs: `ICategoryRepository` / `CategoryRepository`, `ICategoryService` / `CategoryService`, `IFrequencyRepository` / `FrequencyRepository`, `IFrequencyService` / `FrequencyService`, `ITransactionRepository` / `TransactionRepository`, `ITransactionService` / `TransactionService`.
+- `AddControllers`, API versioning (URL segment + query `api-version` + header `x-api-version`), `AddMediatR`, Swagger.
+## API surface conventions
+- Controllers use **versioned routes**, e.g. `FinanceTracker/Controllers/CategoriesV1Controller.cs` — `[Route("api/v{version:apiVersion}/categories")]` with `[ApiVersion("1.0")]`.
+- Similar patterns in `FinanceTracker/Controllers/TransactionsV1Controller.cs` and `FinanceTracker/Controllers/RecurringOptionsV1Controller.cs`.
+## Persistence model
+- `FinanceTracker.Infrastructure/Persistence/FinanceTrackerContext.cs` exposes `DbSet<Category>`, `DbSet<Frequency>`, `DbSet<Transaction>` and applies configurations via `modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly())`.
+## Test stack
+- **Integration tests:** `FinanceTracker.Tests/Integration/FinanceTrackerWebApplicationFactory.cs` swaps SQL Server for **`UseInMemoryDatabase`** under environment `Testing` while keeping the same `FinanceTrackerContext` type.
+- Example tests: `FinanceTracker.Tests/Integration/CategoriesApiIntegrationTests.cs`, `TransactionsApiIntegrationTests.cs` with shared JSON options in `HttpJsonOptions.cs`.
+<!-- gsd-stack-end -->
+
+<!-- gsd-conventions-start source:CONVENTIONS.md -->
+## Conventions
+
+## Style and language
+- **C#** with **nullable reference types** enabled (`Nullable` / `ImplicitUsings` on API and test projects; see `FinanceTracker/FinanceTracker.API.csproj`, `FinanceTracker.Tests/FinanceTracker.Tests.csproj`).
+- **File-scoped namespaces** are common (for example `FinanceTracker.Controllers` in `FinanceTracker/Controllers/TransactionsV1Controller.cs`). Some infrastructure types still use block namespaces (for example `FinanceTracker.Infrastructure.Persistence` in `FinanceTracker.Infrastructure/Persistence/ITransactionRepository.cs`).
+- **Top-level statements** in `FinanceTracker/Program.cs` for host setup; `public partial class Program` at file end supports `WebApplicationFactory<Program>` in tests.
+## Naming
+- **Projects**: `FinanceTracker.API` assembly in folder `FinanceTracker/` (csproj name `FinanceTracker.API.csproj`).
+- **API surface**: controllers use version suffix + `V1` + `Controller`, for example `TransactionsV1Controller` in `FinanceTracker/Controllers/TransactionsV1Controller.cs`.
+- **CQRS / MediatR**: feature folders under `FinanceTracker.Application/Features/<Area>/` with `Commands/<Verb><Entity>/` and `Queries/<Verb><Entity>/` containing `<Name>Command.cs`, `<Name>CommandHandler.cs`, `<Name>Query.cs`, `<Name>QueryHandler.cs`.
+- **DTOs**: request/response shapes in `FinanceTracker.Application/Dtos/` and `FinanceTracker.Application/Dtos/Responses/` (for example `ApiResponseDto<T>` in `FinanceTracker.Application/Dtos/Responses/ApiResponseDto.cs`).
+- **Async**: `*Async` suffix on service and repository methods (for example `AddTransactionAsync`, `GetByIdAsync` in `FinanceTracker.Application/Services/TransactionService.cs` and `FinanceTracker.Infrastructure/Persistence/ITransactionRepository.cs`).
+## Architectural patterns
+- **MediatR** handlers implement `IRequestHandler<,>`; controllers depend on `ISender` and delegate with `Send(...)` — see `FinanceTracker/Controllers/TransactionsV1Controller.cs` and handlers such as `FinanceTracker.Application/Features/Transactions/Commands/CreateTransaction/CreateTransactionCommandHandler.cs`.
+- **Thin controllers**: validation gates (`ModelState`), HTTP mapping, and envelope `ApiResponseDto<T>`; domain work lives in application/infrastructure.
+- **Application services** wrap repositories and orchestrate use cases (`FinanceTracker.Application/Services/` with interfaces `I*`).
+- **EF Core**: `FinanceTrackerContext` and repositories in `FinanceTracker.Infrastructure/Persistence/`; configurations under `Configurations/`.
+- **API versioning**: Asp.Versioning with URL segment `api/v{version:apiVersion}/...` in `FinanceTracker/Program.cs` and controller attributes in files under `FinanceTracker/Controllers/`.
+## Error handling and HTTP responses
+- Consistent envelope: `ApiResponseDto<T>.Ok(...)` / `ApiResponseDto<T>.Fail(message)` in `FinanceTracker.Application/Dtos/Responses/ApiResponseDto.cs`.
+- Controllers return `BadRequest` / `NotFound` with the same envelope where applicable (for example invalid model and missing transaction in `FinanceTracker/Controllers/TransactionsV1Controller.cs`).
+- **No global exception middleware** surfaced in `FinanceTracker/Program.cs`; failures are largely explicit branch returns at the controller or null/bool results from handlers.
+## Async / cancellation
+- Handlers and controllers use `async Task<...>`; MediatR `Handle` accepts `CancellationToken` (for example `CreateTransactionCommandHandler` in `FinanceTracker.Application/Features/Transactions/Commands/CreateTransaction/CreateTransactionCommandHandler.cs`). Call sites in controllers typically do not pass the token through to `Send` in the snippets reviewed — a possible consistency improvement.
+## Dependency injection (`FinanceTracker/Program.cs`)
+- **DbContext**: `AddDbContext<FinanceTrackerContext>` with SQL Server from configuration connection string `FinanceTrackerDB`.
+- **Scoped** registrations for repositories (`ICategoryRepository`, `IFrequencyRepository`, `ITransactionRepository`), services (`ICategoryService`, `IFrequencyService`, `ITransactionService`), and concrete infrastructure types.
+- **MediatR**: `RegisterServicesFromAssemblies` anchored to `GetCategoriesQuery` assembly (`FinanceTracker.Application`).
+- Standard ASP.NET Core: `AddControllers`, Swagger/OpenAPI in Development, HTTPS, authorization pipeline placeholder, `MapControllers`.
+## Related paths
+- Host: `FinanceTracker/Program.cs`
+- Example controller: `FinanceTracker/Controllers/TransactionsV1Controller.cs`
+- Example handler: `FinanceTracker.Application/Features/Transactions/Commands/CreateTransaction/CreateTransactionCommandHandler.cs`
+- Service layer: `FinanceTracker.Application/Services/TransactionService.cs`
+<!-- gsd-conventions-end -->
+
+<!-- gsd-architecture-start source:ARCHITECTURE.md -->
+## Architecture
+
+## Solution and entry point
+- **Solution file:** `FinanceTracker/FinanceTracker.API.sln` groups the runnable host and libraries.
+- **Composition root / host:** `FinanceTracker/Program.cs` configures SQL Server (`FinanceTrackerDB`), registers EF `DbContext`, repository and application service pairs, ASP.NET Core MVC, API versioning, MediatR (scanning the Application assembly via `GetCategoriesQuery`), and Swagger.
+- **Public HTTP surface:** controllers under `FinanceTracker/Controllers/` (`*V1Controller.cs`) expose versioned routes; handlers are thin and delegate to MediatR `ISender`.
+## Layering and project dependencies
+| Layer | Project | References |
+|--------|---------|------------|
+| **Presentation** | `FinanceTracker` (`FinanceTracker.API.csproj`) | `FinanceTracker.Application`, `FinanceTracker.Infrastructure` |
+| **Application** | `FinanceTracker.Application` | `Finance.Tracker.Domain` (on disk), `FinanceTracker.Infrastructure` |
+| **Infrastructure** | `FinanceTracker.Infrastructure` | `Finance.Tracker.Domain` |
+| **Domain** | `Finance.Tracker.Domain` (`FinanceTracker.Domain.csproj`) | *(none — class library)* |
+## Patterns in use
+- **MediatR** — Commands and queries live under `FinanceTracker.Application/Features/{Aggregate}/Commands|Queries/...` with `IRequest` / `IRequestHandler` handlers. Controllers send messages; handlers often call **`ICategoryService`**, `ITransactionService`, or `IFrequencyService` abstractions in `FinanceTracker.Application/Services/`.
+- **Application services** — `CategoryService`, `TransactionService`, `FrequencyService` encapsulate use-case orchestration over repositories (still infrastructure-defined interfaces).
+- **Repository + EF Core** — `FinanceTracker.Infrastructure/Persistence/` contains `FinanceTrackerContext`, entity `IConfiguration` classes under `Persistence/Configurations/`, and repository classes targeting domain entities.
+- **API versioning** — `Asp.Versioning` with URL segment, query string, and header readers; controllers use `[ApiVersion("1.0")]` and route prefixes like `api/v{version:apiVersion}/...`.
+- **Uniform API responses** — `ApiResponseDto<T>` and entity-mapped response DTOs under `FinanceTracker.Application/Dtos/`.
+## Data flow (request path)
+## Domain model
+- **Entities:** `Category`, `Frequency`, `Transaction` in `Finance.Tracker.Domain/Entities/` (namespace `FinanceTracker.Domain.Entities`).
+- Entities carry **data annotations** (`[Key]`, `[Required]`, etc.), aligning the domain assembly with EF mapping expectations (pragmatic anemic model).
+## Testing
+- `FinanceTracker.Tests` references the API and Application projects, supporting integration-style tests against the host (`Microsoft.AspNetCore.Mvc.Testing`) and unit tests with xUnit, Moq, FluentAssertions, and EF InMemory where needed.
+## Architectural trade-offs (summary)
+- **Strengths:** Clear separation of Web host vs Application feature folders vs EF persistence; testable handlers; versioned API.
+- **Tightening options (not current state):** Move repository (and unit-of-work) **interfaces** into Application or Domain and drop Application → Infrastructure reference; keep Infrastructure implementing interfaces only; optionally reduce data annotations from entities in favor of Fluent API only in Infrastructure.
+<!-- gsd-architecture-end -->
+
+<!-- gsd-workflow-start source:GSD defaults -->
+## GSD Workflow Enforcement
+
+Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
+
+Use these entry points:
+- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
+- `/gsd-debug` for investigation and bug fixing
+- `/gsd-execute-phase` for planned phase work
+
+Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
+<!-- gsd-workflow-end -->
+
+
+
+<!-- gsd-profile-start -->
+## Developer Profile
+
+> Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
+> This section is managed by `generate-claude-profile` -- do not edit manually.
+<!-- gsd-profile-end -->
