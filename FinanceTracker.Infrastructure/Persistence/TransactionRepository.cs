@@ -28,12 +28,17 @@ namespace FinanceTracker.Infrastructure.Persistence
                 .FirstOrDefaultAsync(x => x.Id == id);
         }
 
-        public async Task<List<Transaction>> GetAllAsync()
+        public IQueryable<Transaction> GetTransactionsQueryable()
         {
-            return await _context.Transactions
+            return _context.Transactions
                 .AsNoTracking()
                 .Include(x => x.Category)
-                .Include(x => x.Frequency)
+                .Include(x => x.Frequency);
+        }
+
+        public async Task<List<Transaction>> GetAllAsync()
+        {
+            return await GetTransactionsQueryable()
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync();
         }

@@ -15,16 +15,11 @@ Users can reliably record and retrieve transactions with flexible filtering for 
 - ✓ Versioned `GET /api/v{version}/transactions` exists and returns transactions — existing
 - ✓ Transactions have `TransactionDate` and a `Category` relationship — existing
 - ✓ Category-type filtering exists on transactions list (`categoryType`) — existing
+- ✓ **Phase 1:** Date range (`from` / `to`), multi-category `categoryIds` (Guids), optional paging (`page` / `pageSize`) with `items` + `totalCount`, backward-compatible unpaginated list, `pageSize` ≤ 20, empty `categoryIds` rejected — TRX-01..TRX-09
 
 ### Active
 
-- [ ] Extend transactions list endpoint to support filtering by `TransactionDate` (optional `from`/`to`, inclusive bounds)
-- [ ] Extend transactions list endpoint to support filtering by multiple categories (`categoryIds[]`)
-- [ ] Preserve existing behavior: if `categoryIds` is omitted/null, apply `categoryType` when provided
-- [ ] Add optional pagination (1-based `page`, `pageSize`) with deterministic ordering (default: `TransactionDate` desc, then `Id` for tie-break)
-- [ ] Preserve backward compatibility: when pagination params are omitted, return full list (current behavior)
-- [ ] Add paginated response envelope including `totalCount` (when pagination is used)
-- [ ] Enforce `pageSize` cap of 20 for paginated requests
+_(None — milestone v1.0 list/pagination scope delivered.)_
 
 ### Out of Scope
 
@@ -34,8 +29,8 @@ Users can reliably record and retrieve transactions with flexible filtering for 
 ## Context
 
 - Current stack: .NET 8, ASP.NET Core, MediatR, EF Core (SQL Server), API versioning, Swagger.
-- Current transactions list endpoint lives in `FinanceTracker/Controllers/TransactionsV1Controller.cs` and dispatches `GetAllTransactionsQuery`.
-- Current list supports `categoryType` filter; we’re extending it with date range, multi-category IDs, and pagination.
+- Transactions list endpoint: `FinanceTracker/Controllers/TransactionsV1Controller.cs` dispatches `GetTransactionsListQuery` (MediatR).
+- List supports `categoryType`, optional `from`/`to`, `categoryIds`, and optional paging with distinct ordering for paged vs unpaged responses.
 
 ## Constraints
 
@@ -47,13 +42,13 @@ Users can reliably record and retrieve transactions with flexible filtering for 
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Add filters to existing `GET /transactions` | Same resource & representation; avoid duplicated list endpoints | — Pending |
-| `categoryIds` is an array filter; fallback to `categoryType` if `categoryIds` absent | Supports multi-select UI while keeping existing query param useful | — Pending |
-| Date filtering uses optional `from`/`to` | Supports presets + custom range consistently | — Pending |
-| API stays “dumb” about timezone | Keep contract simple; FE sends explicit bounds | — Pending |
-| Pagination is optional and 1-based; default order `TransactionDate` desc | Predictable UX and stable paging | — Pending |
-| Return envelope with `totalCount` for paged responses | Enables FE pagination UI | — Pending |
-| Cap `pageSize` at 20 | Prevent heavy queries from large limits | — Pending |
+| Add filters to existing `GET /transactions` | Same resource & representation; avoid duplicated list endpoints | ✓ Phase 1 |
+| `categoryIds` is an array filter; fallback to `categoryType` if `categoryIds` absent | Supports multi-select UI while keeping existing query param useful | ✓ Phase 1 |
+| Date filtering uses optional `from`/`to` | Supports presets + custom range consistently | ✓ Phase 1 |
+| API stays “dumb” about timezone | Keep contract simple; FE sends explicit bounds | ✓ Phase 1 |
+| Pagination is optional and 1-based; paged order `TransactionDate` desc, then `Id`; unpaged keeps `CreatedAt` desc | Predictable UX and stable paging; backward compatibility | ✓ Phase 1 |
+| Return envelope with `totalCount` for paged responses | Enables FE pagination UI | ✓ Phase 1 |
+| Cap `pageSize` at 20 | Prevent heavy queries from large limits | ✓ Phase 1 |
 
 ## Evolution
 
@@ -73,5 +68,5 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 after initialization*
+*Last updated: 2026-04-01 after Phase 1 execution*
 

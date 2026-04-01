@@ -6,7 +6,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: Transactions list — filters + pagination** - Extend `GET /transactions` to support date range, multi-category filters, and optional deterministic pagination (with total count and guardrails).
+- [x] **Phase 1: Transactions list — filters + pagination** - Extend `GET /transactions` to support date range, multi-category filters, and optional deterministic pagination (with total count and guardrails). (completed 2026-04-01)
 
 ## Phase Details
 
@@ -27,4 +27,4 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Transactions list — filters + pagination | 0/2 | Planned | - |
+| 1. Transactions list — filters + pagination | 2/2 | Complete    | 2026-04-01 |

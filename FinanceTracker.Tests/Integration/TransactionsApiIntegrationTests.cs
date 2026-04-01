@@ -106,6 +106,130 @@ public class TransactionsApiIntegrationTests : IClassFixture<FinanceTrackerWebAp
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task TransactionsList_ByDateRange_FiltersInclusive_TRX01()
+    {
+        var cat = await CreateCategoryViaApiAsync("D1", CategoryType.Expense);
+        var early = await CreateTransactionViaApiAsync("early", cat, new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc));
+        var mid = await CreateTransactionViaApiAsync("mid", cat, new DateTime(2026, 2, 15, 0, 0, 0, DateTimeKind.Utc));
+        var late = await CreateTransactionViaApiAsync("late", cat, new DateTime(2026, 3, 20, 0, 0, 0, DateTimeKind.Utc));
+
+        var response = await _client.GetAsync(
+            "/api/v1/transactions?from=2026-02-01T00:00:00Z&to=2026-02-28T23:59:59Z");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<ApiResponseDto<List<TransactionResponseDto>>>(HttpJsonOptions.ForApi);
+        payload!.Data!.Select(t => t.Id).Should().BeEquivalentTo(new[] { mid });
+        payload.Data!.Should().NotContain(t => t.Id == early || t.Id == late);
+    }
+
+    [Fact]
+    public async Task TransactionsList_ByCategoryIds_FiltersToSelectedGuids_TRX02()
+    {
+        var catA = await CreateCategoryViaApiAsync("CatA", CategoryType.Expense);
+        var catB = await CreateCategoryViaApiAsync("CatB", CategoryType.Expense);
+        var txA = await CreateTransactionViaApiAsync("a", catA, DateTime.UtcNow);
+        var txB = await CreateTransactionViaApiAsync("b", catB, DateTime.UtcNow);
+
+        var response = await _client.GetAsync($"/api/v1/transactions?categoryIds={catA}&categoryIds={catB}");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<ApiResponseDto<List<TransactionResponseDto>>>(HttpJsonOptions.ForApi);
+        payload!.Data!.Select(t => t.Id).Should().BeEquivalentTo(new[] { txA, txB });
+    }
+
+    [Fact]
+    public async Task TransactionsList_CategoryType_WhenCategoryIdsOmitted_StillFilters_TRX03()
+    {
+        var expenseCat = await CreateCategoryViaApiAsync("Exp", CategoryType.Expense);
+        var incomeCat = await CreateCategoryViaApiAsync("Inc", CategoryType.Income);
+        await CreateTransactionViaApiAsync("e", expenseCat, DateTime.UtcNow);
+        await CreateTransactionViaApiAsync("i", incomeCat, DateTime.UtcNow);
+
+        var response = await _client.GetAsync("/api/v1/transactions?categoryType=1");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<ApiResponseDto<List<TransactionResponseDto>>>(HttpJsonOptions.ForApi);
+        payload!.Data.Should().ContainSingle();
+        payload.Data![0].CategoryId.Should().Be(expenseCat);
+    }
+
+    [Fact]
+    public async Task TransactionsList_Paged_ReturnsItemsAndTotalCount_TRX04_05()
+    {
+        var cat = await CreateCategoryViaApiAsync("Paged", CategoryType.Expense);
+        await CreateTransactionViaApiAsync("t1", cat, DateTime.UtcNow);
+        await CreateTransactionViaApiAsync("t2", cat, DateTime.UtcNow);
+        await CreateTransactionViaApiAsync("t3", cat, DateTime.UtcNow);
+
+        var response = await _client.GetAsync("/api/v1/transactions?page=1&pageSize=2");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<ApiResponseDto<PagedTransactionsResponseDto>>(HttpJsonOptions.ForApi);
+        payload.Should().NotBeNull();
+        payload!.Success.Should().BeTrue();
+        payload.Data.Should().NotBeNull();
+        payload.Data!.TotalCount.Should().Be(3);
+        payload.Data.Items.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task TransactionsList_Paged_OrderedByTransactionDateDescThenIdDesc_TRX06()
+    {
+        var cat = await CreateCategoryViaApiAsync("Sort", CategoryType.Expense);
+        var sameDay = new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc);
+        var idFirst = await CreateTransactionViaApiAsync("first", cat, sameDay);
+        var idSecond = await CreateTransactionViaApiAsync("second", cat, sameDay);
+
+        var response = await _client.GetAsync("/api/v1/transactions?page=1&pageSize=10");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<ApiResponseDto<PagedTransactionsResponseDto>>(HttpJsonOptions.ForApi);
+        var ids = payload!.Data!.Items.Select(t => t.Id).ToList();
+        ids.Should().HaveCount(2);
+        var maxFirst = ids[0].CompareTo(ids[1]) > 0;
+        maxFirst.Should().BeTrue("paged list should be ordered by Id descending when TransactionDate ties");
+    }
+
+    [Fact]
+    public async Task TransactionsList_PageSizeOver20_Returns400_TRX07()
+    {
+        var response = await _client.GetAsync("/api/v1/transactions?page=1&pageSize=21");
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task TransactionsList_Unpaged_ReturnsListEnvelope_NotPagedDto_TRX08()
+    {
+        var cat = await CreateCategoryViaApiAsync("Unpaged", CategoryType.Expense);
+        await CreateTransactionViaApiAsync("x", cat, DateTime.UtcNow);
+
+        var response = await _client.GetAsync("/api/v1/transactions");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<ApiResponseDto<List<TransactionResponseDto>>>(HttpJsonOptions.ForApi);
+        payload!.Success.Should().BeTrue();
+        payload.Data.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task TransactionsList_EmptyCategoryIdsQuery_Returns400_TRX09()
+    {
+        var response = await _client.GetAsync("/api/v1/transactions?categoryIds=");
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    private async Task<Guid> CreateTransactionViaApiAsync(string name, Guid categoryId, DateTime transactionDate)
+    {
+        var dto = new CreateTransactionDto
+        {
+            Name = name,
+            CategoryId = categoryId,
+            Amount = 1m,
+            TransactionDate = transactionDate,
+            CreatedBy = "integration-test"
+        };
+        var postResponse = await _client.PostAsJsonAsync("/api/v1/transactions", dto, HttpJsonOptions.ForApi);
+        postResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await postResponse.Content.ReadFromJsonAsync<ApiResponseDto<TransactionResponseDto>>(HttpJsonOptions.ForApi);
+        created!.Data!.Id.Should().NotBeEmpty();
+        return created.Data.Id;
+    }
+
     private async Task<Guid> CreateCategoryViaApiAsync(string name, CategoryType categoryType)
     {
         var dto = new CreateCategoryDto { Name = name, CategoryType = categoryType };

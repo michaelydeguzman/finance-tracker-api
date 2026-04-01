@@ -4,7 +4,7 @@ using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Features.Transactions.Commands.CreateTransaction;
 using FinanceTracker.Application.Features.Transactions.Commands.DeleteTransaction;
 using FinanceTracker.Application.Features.Transactions.Commands.UpdateTransaction;
-using FinanceTracker.Application.Features.Transactions.Queries.GetAllTransactions;
+using FinanceTracker.Application.Features.Transactions.Queries.GetTransactionsList;
 using FinanceTracker.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -57,9 +57,50 @@ public class TransactionsV1Controller : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<ApiResponseDto<List<TransactionResponseDto>>>> GetTransactions([FromQuery] CategoryType? categoryType)
+    public async Task<IActionResult> GetTransactions(
+        [FromQuery] CategoryType? categoryType,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] List<Guid>? categoryIds,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize)
     {
-        var transactions = await _sender.Send(new GetAllTransactionsQuery(categoryType));
-        return Ok(ApiResponseDto<List<TransactionResponseDto>>.Ok(transactions));
+        var categoryIdsKeyPresent = Request.Query.Keys.Any(k =>
+            string.Equals(k, "categoryIds", StringComparison.OrdinalIgnoreCase));
+
+        if (categoryIdsKeyPresent && (categoryIds is null || categoryIds.Count == 0))
+            return BadRequest(ApiResponseDto<List<TransactionResponseDto>>.Fail(
+                "categoryIds was provided but is empty. Omit the parameter or supply at least one category ID."));
+
+        var pageSupplied = page.HasValue;
+        var pageSizeSupplied = pageSize.HasValue;
+        if (pageSupplied != pageSizeSupplied)
+            return BadRequest(ApiResponseDto<List<TransactionResponseDto>>.Fail(
+                "Both page and pageSize are required for pagination."));
+
+        if (pageSupplied && pageSizeSupplied)
+        {
+            if (page is < 1)
+                return BadRequest(ApiResponseDto<List<TransactionResponseDto>>.Fail("page must be >= 1."));
+            if (pageSize is < 1)
+                return BadRequest(ApiResponseDto<List<TransactionResponseDto>>.Fail("pageSize must be >= 1."));
+            if (pageSize > 20)
+                return BadRequest(ApiResponseDto<List<TransactionResponseDto>>.Fail("pageSize cannot exceed 20."));
+        }
+
+        var result = await _sender.Send(new GetTransactionsListQuery(
+            categoryType,
+            from,
+            to,
+            categoryIds,
+            categoryIdsKeyPresent,
+            page,
+            pageSize));
+
+        if (!result.IsPaged)
+            return Ok(ApiResponseDto<List<TransactionResponseDto>>.Ok(result.Items.ToList()));
+
+        return Ok(ApiResponseDto<PagedTransactionsResponseDto>.Ok(
+            new PagedTransactionsResponseDto(result.Items.ToList(), result.TotalCount!.Value)));
     }
 }
