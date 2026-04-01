@@ -21,10 +21,10 @@
   4. For paginated requests, `pageSize` never exceeds 20 (requests above cap are rejected or coerced per requirement interpretation) and `page` is treated as 1-based.
   5. Calling `GET /api/v1/transactions` with no pagination parameters preserves current behavior by returning the full list (no paging envelope requirement beyond existing conventions).
   6. Calling `GET /api/v1/transactions?categoryIds=` (present but empty array semantics) is rejected with a clear 400 error.
-**Plans**: TBD
+**Plans**: `01-PLAN.md` (implementation), `02-PLAN.md` (integration tests)
 
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Transactions list — filters + pagination | 0/1 | Not started | - |
+| 1. Transactions list — filters + pagination | 0/2 | Planned | - |
