@@ -31,6 +31,8 @@ _(None — milestone v1.0 list/pagination scope delivered.)_
 - Current stack: .NET 8, ASP.NET Core, MediatR, EF Core (SQL Server), API versioning, Swagger.
 - Transactions list endpoint: `FinanceTracker/Controllers/TransactionsV1Controller.cs` dispatches `GetTransactionsListQuery` (MediatR).
 - List supports `categoryType`, optional `from`/`to`, `categoryIds`, and optional paging with distinct ordering for paged vs unpaged responses.
+- **v1.0 shipped:** ~2,850 LOC C# across the solution; 8 integration tests cover all TRX requirements.
+- Known technical debt: none recorded from v1.0.
 
 ## Constraints
 
@@ -68,5 +70,5 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after Phase 1 execution*
+*Last updated: 2026-04-25 after v1.0 milestone completion*
 
