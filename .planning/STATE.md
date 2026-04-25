@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: Transactions List Filters + Pagination
-status: v1.0 milestone archived — planning next milestone
-last_updated: "2026-04-25T06:41:29.815Z"
+milestone: v1.1
+milestone_name: Authentication & Authorization
+status: Defining requirements
+last_updated: "2026-04-25T07:00:00.000Z"
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # STATE — Finance Tracker API
@@ -20,32 +20,35 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-04-25)
 
 - **Core value**: Users can reliably record and retrieve transactions with flexible filtering for reporting and UI views.
-- **Current focus**: Planning next milestone (run `/gsd-new-milestone` to start)
+- **Current focus**: v1.1 — Authentication & Authorization
 - **Primary artifact**: `.planning/ROADMAP.md`
 
 ## Current Position
 
-- **Current phase**: v1.0 complete and archived
-- **Status**: Ready for next milestone
-- **Progress**: 100% (v1.0)
+- **Phase**: Not started (defining requirements)
+- **Plan**: —
+- **Status**: Defining requirements
+- **Last activity**: 2026-04-25 — Milestone v1.1 started
 
 ## Phase Tracking
 
 | Phase | Status | Notes |
 |------:|--------|------|
-| 1 | **Complete** | List filters, pagination, integration tests, `01-VERIFICATION.md` passed |
+| (phases defined after roadmap creation) | | |
 
 ## Decisions (sticky)
 
-- Keep `GET /transactions` backward-compatible: omit paging params → full list (current behavior).
-- Pagination is optional and **1-based** with deterministic ordering for **paged** responses: `TransactionDate` desc, then `Id` as tie-break; **unpaged** list remains ordered by `CreatedAt` desc.
-- API remains "timezone dumb": client supplies intended bounds.
+- JWT bearer tokens (not cookies) — API-first, stateless auth.
+- Google OAuth2 via ASP.NET Core Identity external logins.
+- Auto-verify on registration — no email verification step this milestone.
+- Per-user data isolation — all transaction queries scoped to authenticated user's ID.
+- Existing transactions assigned to seed admin user on migration.
 
 ## Blockers / Risks
 
-- None recorded.
+- Google OAuth2 requires a Google Cloud project + OAuth2 credentials before implementation.
 
 ## Notes / Context
 
-- v1 TRX-01..TRX-09 all complete — archived to `.planning/milestones/v1.0-REQUIREMENTS.md`.
-- Next: `/gsd-new-milestone` to start v2 planning.
+- Previous milestone (v1.0): TRX-01..TRX-09 complete, archived to `.planning/milestones/`.
+- Next: requirements definition → roadmap creation.
