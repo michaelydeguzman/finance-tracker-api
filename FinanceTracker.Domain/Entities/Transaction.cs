@@ -22,11 +22,8 @@ namespace FinanceTracker.Domain.Entities
 
         public DateTime TransactionDate { get; set; }
 
-        // Optional Recurring configuration
-        public Guid? FrequencyId { get; set; }
-
-        // Navigation property
-        public Frequency? Frequency { get; set; }
+        public Guid? RecurringTransactionId { get; set; }
+        public RecurringTransaction? RecurringTransaction { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
