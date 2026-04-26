@@ -19,17 +19,17 @@
 
 | Phase | Milestone | Plans Complete | Status   | Completed  |
 |-------|-----------|----------------|----------|------------|
-| 1. Transactions list — filters + pagination | v1.0 | 2/2 | Complete | 2026-04-01 |
+| 1. Transactions list — filters + pagination | v1.0 | 1/1 | Complete   | 2026-04-26 |
 
 ### Phase 1: Clean up recurring transaction dead code and reconcile domain projects
 
 **Goal:** Delete the dead `FinanceTracker.Domain/` draft project and rename the live `Finance.Tracker.Domain/` folder to `FinanceTracker.Domain/` so all projects follow the `FinanceTracker.*` naming convention; solution builds with 0 errors and 0 warnings.
 **Requirements**: none (structural cleanup — no formal requirement IDs)
 **Depends on:** Phase 0
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 01-01-PLAN.md — Delete dead domain project, rename live domain folder, update .sln and .csproj references, verify clean build
+- [x] 01-01-PLAN.md — Delete dead domain project, rename live domain folder, update .sln and .csproj references, verify clean build
 
 ### Phase 2: Redesign recurring transaction domain model with template and instance separation
 

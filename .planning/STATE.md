@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Authentication & Authorization
-status: Defining requirements
-last_updated: "2026-04-25T07:00:00.000Z"
+milestone: v1.0
+milestone_name: milestone
+status: Phase complete — ready for verification
+last_updated: "2026-04-26T07:17:32.037Z"
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 6
+  completed_phases: 2
+  total_plans: 3
+  completed_plans: 3
 ---
 
 # STATE — Finance Tracker API
@@ -25,10 +25,13 @@ See: `.planning/PROJECT.md` (updated 2026-04-25)
 
 ## Current Position
 
-- **Phase**: Not started (defining requirements)
-- **Plan**: —
-- **Status**: Defining requirements
-- **Last activity**: 2026-04-25 — Milestone v1.1 started
+Phase: 01 (clean-up-recurring-transaction-dead-code-and-reconcile-domain-projects) — COMPLETE
+Plan: 1 of 1 — COMPLETE
+
+- **Phase**: Complete — all plans executed, ready for verification
+- **Plan**: 01-01-PLAN.md executed 2026-04-26
+- **Status**: ready_for_verification
+- **Last activity**: 2026-04-26 — Phase 01 Plan 01 executed; build and 21 tests green
 
 ## Phase Tracking
 
@@ -43,6 +46,8 @@ See: `.planning/PROJECT.md` (updated 2026-04-25)
 - Auto-verify on registration — no email verification step this milestone.
 - Per-user data isolation — all transaction queries scoped to authenticated user's ID.
 - Existing transactions assigned to seed admin user on migration.
+- **[Phase 01]** Used `git mv` for domain folder rename to preserve entity file history (`git log --follow` works).
+- **[Phase 01]** Cleared bin/obj before `git mv` to avoid Windows file-lock Permission denied error (gitignored, safe to remove).
 
 ## Blockers / Risks
 
