@@ -33,13 +33,14 @@ Plans:
 
 ### Phase 2: Redesign recurring transaction domain model with template and instance separation
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Introduce `RecurringTransaction` as a template entity (master definition) with its own `RecurringTransactions` table, wire individual `Transaction` instances back to it via a nullable `RecurringTransactionId` FK, remove `Transaction.FrequencyId`, and generate a schema migration that safely nulls existing FrequencyId data — giving Phases 3–5 a clean domain foundation to build on.
+**Requirements**: none (structural domain model work — no formal requirement IDs; see decision IDs D-01..D-10 in CONTEXT.md)
 **Depends on:** Phase 1
-**Plans:** 0 plans
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 2 to break down)
+- [ ] 02-01-PLAN.md — Create RecurringTransaction entity + enum, restructure Transaction/Frequency/Category entities, remove all FrequencyId references from app/infra/test layers (clean build)
+- [ ] 02-02-PLAN.md — Create RecurringTransactionConfiguration, update TransactionConfiguration + DbContext, generate migration with data-nulling SQL, add RecurringTransaction domain model tests (22+ tests pass)
 
 ### Phase 3: Fix calendar-based frequency interval logic for monthly, quarterly, and annual recurrences
 
