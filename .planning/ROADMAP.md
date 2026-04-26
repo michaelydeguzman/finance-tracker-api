@@ -40,7 +40,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md — Create RecurringTransaction entity + enum, restructure Transaction/Frequency/Category entities, remove all FrequencyId references from app/infra/test layers (clean build)
-- [ ] 02-02-PLAN.md — Create RecurringTransactionConfiguration, update TransactionConfiguration + DbContext, generate migration with data-nulling SQL, add RecurringTransaction domain model tests (22+ tests pass)
+- [x] 02-02-PLAN.md — Create RecurringTransactionConfiguration, update TransactionConfiguration + DbContext, generate migration with data-nulling SQL, add RecurringTransaction domain model tests (22+ tests pass)
 
 ### Phase 3: Fix calendar-based frequency interval logic for monthly, quarterly, and annual recurrences
 
