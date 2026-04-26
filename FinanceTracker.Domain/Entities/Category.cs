@@ -1,26 +1,30 @@
-﻿namespace FinanceTracker.Domain.Entities
+﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace FinanceTracker.Domain.Entities
 {
-    public class Recurring
+    public enum CategoryType
     {
-        public string Frequency { get; set; }
-        public DateTime StartDate { get; set; }
-        public DateTime EndDate { get; set; }
+        Income,
+        Expense
     }
 
     public class Category
     {
-        public Guid Id { get; private set; }
-        public string Name { get; private set; }
-        public string CategoryType { get; private set; }
-        public DateTime CreatedAt { get; set; }
-        public bool IsActive { get; set; }
-        public Recurring RecurringProps { get; set; }
+        [Key]
+        public Guid Id { get; set; }
+        
+        [Required]
+        [MaxLength(100)]
+        public string Name { get; set; } = string.Empty;
+        
+        [Required]
+        public CategoryType CategoryType { get; set; }
+        
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        
+        public bool IsActive { get; set; } = true;
 
-        public Category(string name, bool isIncome)
-        {
-            Id = Guid.NewGuid();
-            Name = name ?? throw new ArgumentNullException(nameof(name));
-            IsIncome = isIncome;
-        }
+        public ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
     }
 }
