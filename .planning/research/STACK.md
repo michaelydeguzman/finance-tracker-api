@@ -1,150 +1,270 @@
-# Technology Stack Research — Finance Tracker API (.NET 8)
+# Stack Research
 
-**Project:** Finance Tracker API  
-**Scope:** stack/patterns for a .NET 8 REST API (filtering, pagination, validation, auth, observability, OpenAPI)  
-**Researched:** 2026-03-31  
-**Overall confidence:** **MEDIUM** (high for MS/OpenTelemetry guidance; medium for “best” library picks like Sieve/Serilog that are ecosystem-common but optional)
+**Domain:** ASP.NET Core REST API — Authentication & Authorization additions
+**Researched:** 2026-04-25
+**Confidence:** HIGH (all packages verified against NuGet.org; official docs consulted)
 
-## Recommended stack (2026-ready, .NET 8-compatible)
+---
 
-### Core framework + API surface
-| Category | Recommendation | Why | Notes |
-|---|---|---|---|
-| Runtime | **.NET 8 / ASP.NET Core** | LTS, stable ecosystem | You already target `net8.0`. |
-| API style | **Controllers** (keep) | Fits current codebase + ApiVersioning + Swashbuckle | Minimal APIs are optional; no need to rewrite. |
-| API versioning | **Asp.Versioning.Mvc** + **ApiExplorer** | Industry-standard versioning for ASP.NET Core | Repo already uses `Asp.Versioning.Mvc` + `Asp.Versioning.Mvc.ApiExplorer`. Source: `https://github.com/dotnet/aspnet-api-versioning`. |
-| OpenAPI | **Swashbuckle.AspNetCore** (keep) | Widely used for Swagger UI + schema generation | MS now ships a built-in OpenAPI feature set too; see “Alternatives” below. Source: `https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/aspnetcore-openapi?view=aspnetcore-8.0`. |
+## Context: What Exists vs. What Is Being Added
 
-### Authentication & authorization
-| Scenario | Recommendation | Why | Notes / Pattern |
-|---|---|---|---|
-| Dev/local tokens | **`dotnet user-jwts` + JwtBearer** | Quick, safe local testing without standing up an IdP | MS guidance: `dotnet user-jwts` integrates with JwtBearer. Source: `https://learn.microsoft.com/en-us/aspnet/core/security/authentication/jwt-authn?view=aspnetcore-8.0`. |
-| Production (typical) | **External OIDC provider + JwtBearer** | Avoid running your own auth server unless required | Use policy-based authorization for claims/roles. Source: `https://learn.microsoft.com/en-us/aspnet/core/security/authorization/introduction?view=aspnetcore-8.0`. |
-| “We must self-host auth” | **OpenIddict** | Mature OSS option for OIDC server/client/validation in .NET | Official docs: `https://documentation.openiddict.com/`. |
+This milestone adds auth to an **existing** .NET 8 API that already has:
+- EF Core 8 + SQL Server (`FinanceTrackerContext : DbContext` in `FinanceTracker.Infrastructure`)
+- MediatR CQRS
+- API versioning + Swagger
 
-**Auth patterns to standardize:**
-- **Policies over roles** for most checks (claims-based, evolvable).
-- **Explicit authorization scopes/claims** for “write” operations (e.g., `transactions:write`) and allow read-only tokens where useful.
-- **ProblemDetails for auth failures** (401/403) so clients get consistent error shapes.
+The packages below are **additions only**. However, the existing EF Core packages are pinned at `8.0.0` in `FinanceTracker.API.csproj` and must be bumped to `8.0.25` to match the Identity package's transitive dependency (`Identity.EntityFrameworkCore 8.0.25` requires `EntityFrameworkCore.Relational >= 8.0.25`).
 
-### Validation (DTOs / commands / queries)
-| Category | Recommendation | Why | Notes |
-|---|---|---|---|
-| Validator library | **FluentValidation (core package)** | Ergonomic, strongly-typed validation rules | Source: `https://github.com/FluentValidation/FluentValidation`. |
-| ASP.NET Core integration | **Avoid `FluentValidation.AspNetCore` for new work** | Project is **unsupported / not maintained**; also auto-validation has async limitations | Source: `https://github.com/FluentValidation/FluentValidation.AspNetCore` (repo) and current docs/results indicating unsupported status. |
-| Where validation runs | **MediatR pipeline behavior** (recommended) | Matches your CQRS/MediatR usage; works for async rules | Pattern: validate request objects (commands/queries) before handler executes; throw a domain/app validation exception that maps to ProblemDetails. |
+---
 
-**Practical pattern for this repo:**
-- Keep `[ApiController]` + data annotations for “surface-level” constraints (required fields, formatting) **or** move most rules into FluentValidation for consistency.
-- For query-string filters (like `from`, `to`, `page`, `pageSize`), validate in the MediatR query validator so your controller stays thin.
+## Recommended Stack
 
-### Filtering, sorting, pagination
-You have a concrete requirement: optional paging (1-based `page`, capped `pageSize <= 20`), deterministic ordering, `totalCount` only when paging is used, and backward compatibility when paging params are omitted.
+### Core NuGet Packages to Add
 
-| Need | Recommendation | Why | Notes |
-|---|---|---|---|
-| “Simple, domain-specific filters” | **Hand-rolled filter DTO + explicit LINQ** | Best clarity, easiest to keep backwards-compatible semantics | For your case (`categoryType`, `categoryIds[]`, `from/to`), explicit code is usually simpler than a generic query language. |
-| “Generic filtering/sorting across many endpoints” | **Sieve** (optional) | Popular lightweight approach for query-string driven filtering/sorting/paging | Source: `https://github.com/Biarity/Sieve`. Use when you want consistent filtering syntax across many resources. |
-| Pagination style | **Offset paging now**, consider **keyset paging later** | Offset paging fits current UI needs; keyset avoids deep-page costs | Always include a deterministic order (`TransactionDate desc, Id desc`) before paging. |
-| Counting | **`totalCount` only for paged requests** | Keeps unpaged requests cheap; matches your stated contract | Implement as a separate `CountAsync()` over the filtered query before `Skip/Take`. |
+| Package | Version | Purpose | Why |
+|---------|---------|---------|-----|
+| `Microsoft.AspNetCore.Identity.EntityFrameworkCore` | `8.0.25` | Identity user/role management backed by EF Core | The canonical .NET identity system; adds `AspNetUsers`, `AspNetUserTokens`, etc. tables via EF migrations. Integrates directly into the existing `DbContext`. Required for `UserManager<T>`, `SignInManager<T>`, and the external login pipeline. |
+| `Microsoft.AspNetCore.Authentication.JwtBearer` | `8.0.15` | JWT bearer middleware that validates `Authorization: Bearer` headers | Ships with ASP.NET Core; zero-config DI integration. Validates tokens on every request — no custom middleware needed. Pinning to `8.0.x` keeps parity with the rest of the ASP.NET Core runtime packages. |
+| `Microsoft.AspNetCore.Authentication.Google` | `8.0.15` | Google OAuth2 / OpenID Connect external login handler | Official Microsoft package implementing the OAuth2 authorization-code flow for Google. Integrates with ASP.NET Core Identity's external login pipeline out of the box. Same `8.0.x` version train as JwtBearer and Identity. |
+| `System.IdentityModel.Tokens.Jwt` | `8.17.0` | JWT token creation (`JwtSecurityTokenHandler` / `SecurityTokenDescriptor`) | Pulled in as a transitive dependency of `JwtBearer`, but should be referenced **explicitly** because you will call `JwtSecurityTokenHandler.CreateEncodedJwt()` (or `JsonWebTokenHandler`) in your token-generation service. Version `8.x` is recommended over `7.x` even on .NET 8 — `7.x` reaches EOL Nov 10, 2026. |
 
-**Concrete patterns to standardize:**
-- **Request DTO**: `TransactionsListQuery` includes filters + optional paging fields.
-- **Deterministic ordering**: always apply order before `Skip/Take` (tie-break by `Id`).
-- **Two-phase query**:
-  - `filtered = baseQuery.Where(...)`
-  - `totalCount = await filtered.CountAsync()` (only when paging requested)
-  - `items = await filtered.OrderByDescending(...).ThenByDescending(...).Skip(...).Take(...).ToListAsync()`
-- **AsNoTracking** for list queries (default unless you need tracking).
+> **Version note:** All three ASP.NET Core packages (`JwtBearer`, `Identity.EntityFrameworkCore`, `Authentication.Google`) are at `8.0.15` as of April 2026 — the latest patch on the .NET 8 LTS train. Verified on NuGet.org.
 
-### Data access (EF Core / SQL Server)
-| Category | Recommendation | Why | Notes / Pattern |
-|---|---|---|---|
-| ORM | **EF Core 8 + SQL Server provider** (keep) | Good fit, already in repo | EF Core repo: `https://github.com/dotnet/efcore`. Querying docs: `https://learn.microsoft.com/en-us/ef/core/querying/`. |
-| Query performance hygiene | **AsNoTracking + projection + cancellation tokens** | Lower memory/CPU, avoid over-fetching | Standardize list endpoints to project to DTOs in-query where practical. |
-| Query composition | **IQueryable boundary discipline** | Prevent accidental client-eval or premature materialization | Keep `IQueryable` in repository/service until all filters applied; materialize once. |
-| Paging correctness | **Stable ordering** | Avoid duplicates/missing items across pages | Your contract already calls this out—make it a “must”. |
+---
 
-### Observability (logs, metrics, traces)
-| Signal | Recommendation | Why | Sources |
-|---|---|---|---|
-| Traces + metrics + logs export | **OpenTelemetry SDK + OTLP exporter** | Vendor-neutral; first-class guidance in .NET ecosystem | MS overview + package list: `https://learn.microsoft.com/en-us/dotnet/core/diagnostics/observability-with-otel` and OTel .NET docs: `https://opentelemetry.io/docs/languages/net/`. |
-| Instrumentation | **AspNetCore + HttpClient + SqlClient (+ EFCore if used)** | Covers incoming HTTP, outbound calls, DB spans | MS packages list includes these instrumentations. Source: `https://learn.microsoft.com/en-us/dotnet/core/diagnostics/observability-with-otel`. |
-| Local dev experience | **Aspire Dashboard (optional)** | Great local trace/log/metric loop without committing to a vendor | Mentioned in MS OTel guidance as a local dashboard option. Source: `https://learn.microsoft.com/en-us/dotnet/core/diagnostics/observability-with-otel`. |
-| Structured logging | **Serilog (optional) OR stick to `Microsoft.Extensions.Logging` + OTel logs** | Serilog is widely used; but OTel logs + MEL can be enough | Serilog ASP.NET Core repo: `https://github.com/serilog/serilog-aspnetcore`. MS logging fundamentals: `https://learn.microsoft.com/en-us/aspnet/core/fundamentals/logging/?view=aspnetcore-8.0`. |
+### Supporting Libraries
 
-**Observability patterns to standardize:**
-- **Correlation**: ensure request id / trace id is included in logs (Serilog enrichers or MEL scopes).
-- **HTTP request logging**: log status code + elapsed time + route template (avoid logging PII).
-- **Exception handling**: global exception handler that returns ProblemDetails and emits structured logs + trace events.
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| `Microsoft.IdentityModel.JsonWebTokens` | `8.17.0` | Modern, async-first JWT handler (transitive dep of `System.IdentityModel.Tokens.Jwt 8.x`) | Optional explicit reference if you want to use `JsonWebTokenHandler` (the new API) instead of `JwtSecurityTokenHandler` (the legacy API). The new handler is ~30% faster and preferred for new code. Transitive otherwise. |
 
-### API error + contract conventions
-| Category | Recommendation | Why | Notes |
-|---|---|---|---|
-| Error shape | **RFC 7807 ProblemDetails everywhere** | Consistent client handling | If not already, standardize validation errors + exception mapping to ProblemDetails. |
-| OpenAPI-first discipline | **Keep Swagger accurate** | Prevent client drift | Use schema examples for list envelopes and paging parameters. |
+---
 
-## “Solid defaults” library set (NuGet shortlist)
-This is a pragmatic set that tends to age well for REST APIs:
+## Installation
 
-- **API/versioning/OpenAPI**
-  - `Asp.Versioning.Mvc`
-  - `Asp.Versioning.Mvc.ApiExplorer`
-  - `Swashbuckle.AspNetCore` (or MS OpenAPI alternative below)
-- **Validation**
-  - `FluentValidation`
-  - *(Optional)* `FluentValidation.DependencyInjectionExtensions`
-- **Observability**
-  - `OpenTelemetry`
-  - `OpenTelemetry.Exporter.OpenTelemetryProtocol`
-  - `OpenTelemetry.Instrumentation.AspNetCore`
-  - `OpenTelemetry.Instrumentation.Http`
-  - `OpenTelemetry.Instrumentation.SqlClient`
-  - *(Optional)* `OpenTelemetry.Instrumentation.EntityFrameworkCore` (if you want EF-specific spans; otherwise SqlClient spans may be enough depending on setup)
-- **Logging (optional)**
-  - `Serilog.AspNetCore` + a sink (Console/Seq/ApplicationInsights/etc.)
-- **Filtering/sorting/paging (optional)**
-  - `Sieve`
+```bash
+# Core auth packages (target project where DbContext lives)
+dotnet add package Microsoft.AspNetCore.Identity.EntityFrameworkCore --version 8.0.15
+dotnet add package Microsoft.AspNetCore.Authentication.JwtBearer --version 8.0.15
+dotnet add package Microsoft.AspNetCore.Authentication.Google --version 8.0.15
+dotnet add package System.IdentityModel.Tokens.Jwt --version 8.17.0
+```
 
-## Alternatives (when/why you’d choose them)
+---
 
-### OpenAPI: Microsoft OpenAPI vs Swashbuckle
-- **Recommendation for this repo:** keep **Swashbuckle** for now (least churn; you already have it).
-- **Consider Microsoft OpenAPI** if you want tighter alignment with built-in ASP.NET Core OpenAPI support and less third-party surface area. Source: `https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/aspnetcore-openapi?view=aspnetcore-8.0`.
+## Integration Points with Existing Stack
 
-### Filtering/paging: explicit code vs Sieve
-- **Explicit code** wins when:
-  - Filters are domain-specific and few (your current case).
-  - You need nuanced backward compatibility semantics (like “use `categoryType` only when `categoryIds` is absent”).
-- **Sieve** wins when:
-  - You want a consistent generic filtering language across many resources.
-  - You’re OK standardizing on its query parameter syntax for the long term.
+### 1. EF Core DbContext — Identity Tables
 
-### Auth server: don’t self-host unless required
-- If the app is personal/small-team, the simplest “solid” approach is **JwtBearer with an external IdP** (or local dev tokens with `user-jwts`).
-- If you truly need a self-hosted authorization server, **OpenIddict** is the primary OSS candidate to research deeper. Source: `https://documentation.openiddict.com/`.
+`ApplicationDbContext` must switch base class from `DbContext` to `IdentityDbContext<ApplicationUser>`:
 
-## Implementation notes tailored to your current architecture
-You’re using **MediatR** and already have service/repository layers. The most maintainable pattern here is:
+```csharp
+// Before
+public class ApplicationDbContext : DbContext { ... }
 
-- **Controllers**: only parse query/body → send a MediatR request → return result/envelope.
-- **MediatR pipeline behaviors**:
-  - **ValidationBehavior** (FluentValidation)
-  - *(Optional)* **LoggingBehavior** (structured “command/query started/finished”)
-  - *(Optional)* **TransactionBehavior** for write operations (if you centralize unit-of-work)
-- **EF Core query shaping** happens in your service/repository layer with explicit LINQ so paging/count semantics are correct and auditable.
+// After
+public class ApplicationUser : IdentityUser { }  // extend if you need custom columns
 
-## Sources (authoritative first)
-- Microsoft Learn — OpenAPI in ASP.NET Core: `https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/aspnetcore-openapi?view=aspnetcore-8.0`
-- Microsoft Learn — JWT auth & `dotnet user-jwts` (updated 2025-08-08): `https://learn.microsoft.com/en-us/aspnet/core/security/authentication/jwt-authn?view=aspnetcore-8.0`
-- Microsoft Learn — Authorization overview: `https://learn.microsoft.com/en-us/aspnet/core/security/authorization/introduction?view=aspnetcore-8.0`
-- Microsoft Learn — .NET observability with OpenTelemetry: `https://learn.microsoft.com/en-us/dotnet/core/diagnostics/observability-with-otel`
-- OpenTelemetry docs — .NET language docs (modified 2026-01-27): `https://opentelemetry.io/docs/languages/net/`
-- Serilog ASP.NET Core integration (official repo): `https://github.com/serilog/serilog-aspnetcore`
-- FluentValidation (official repo): `https://github.com/FluentValidation/FluentValidation`
-- FluentValidation.AspNetCore (official repo; marked unsupported per maintainer messaging in ecosystem): `https://github.com/FluentValidation/FluentValidation.AspNetCore`
-- OpenIddict docs: `https://documentation.openiddict.com/`
-- EF Core querying docs: `https://learn.microsoft.com/en-us/ef/core/querying/`
-- ASP.NET API Versioning (official repo): `https://github.com/dotnet/aspnet-api-versioning`
-- Sieve (filtering/sorting/pagination): `https://github.com/Biarity/Sieve`
+public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
+{
+    public DbSet<Transaction> Transactions { get; set; }
+    // ... existing DbSets unchanged
+}
+```
 
+This triggers a migration that adds 6 Identity tables to the existing SQL Server database:
+`AspNetUsers`, `AspNetRoles`, `AspNetUserRoles`, `AspNetUserClaims`, `AspNetRoleClaims`, `AspNetUserLogins`, `AspNetUserTokens`
+
+The existing `Transactions` table and all prior migrations are unaffected.
+
+### 2. Transaction → User FK
+
+Add `UserId` (string FK → `AspNetUsers.Id`) to the `Transaction` entity. This is a separate migration after the Identity migration. Seed admin user is created in `HasData` or via a migration with a fixed GUID.
+
+### 3. MediatR — Where Auth Logic Lives
+
+For consistency with the existing CQRS pattern, auth operations should be MediatR commands:
+- `RegisterCommand` → creates Identity user, returns JWT
+- `LoginCommand` → validates credentials, returns JWT
+- `GoogleCallbackCommand` → processes external login callback, returns JWT
+
+Alternatively, auth logic can live in a dedicated `ITokenService` / `IAuthService` and be called directly from a non-MediatR controller. Either approach is valid; MediatR is recommended for uniformity.
+
+### 4. `Program.cs` Registration Order
+
+Order matters. Add after `AddDbContext`, before `AddControllers`:
+
+```csharp
+// Identity (after DbContext)
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+{
+    options.User.RequireUniqueEmail = true;
+    options.Password.RequireDigit = true;
+    options.Password.RequiredLength = 8;
+    // Email confirmation NOT required (auto-verified this milestone)
+    options.SignIn.RequireConfirmedAccount = false;
+})
+.AddEntityFrameworkStores<ApplicationDbContext>()
+.AddDefaultTokenProviders();
+
+// JWT Bearer
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)),
+        ClockSkew = TimeSpan.FromSeconds(30) // tighten from default 5 min
+    };
+})
+.AddGoogle(options =>
+{
+    options.ClientId = builder.Configuration["Authentication:Google:ClientId"]!;
+    options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]!;
+});
+
+// Middleware pipeline (after app.UseRouting())
+app.UseAuthentication(); // must come before UseAuthorization
+app.UseAuthorization();
+```
+
+---
+
+## JWT Configuration
+
+### appsettings.json structure
+
+```json
+{
+  "Jwt": {
+    "Key": "<SECRET — minimum 32 characters for HMAC-SHA256>",
+    "Issuer": "finance-tracker-api",
+    "Audience": "finance-tracker-client",
+    "ExpiryMinutes": 60
+  },
+  "Authentication": {
+    "Google": {
+      "ClientId": "<from Google Cloud Console>",
+      "ClientSecret": "<from Google Cloud Console>"
+    }
+  }
+}
+```
+
+Store real values in `dotnet user-secrets` for local dev; environment variables / Azure Key Vault for production.
+
+### Signing Key Choice
+
+**Use symmetric (HMAC-SHA256) for this project.** The key must be ≥ 256 bits (32 ASCII chars):
+
+- Symmetric is appropriate because a single API both issues and validates its own tokens — asymmetric (RSA/EC) is only needed when multiple independent services need to validate tokens without sharing a secret.
+- Keep the key at least 32 characters; `JwtBearerDefaults.AuthenticationScheme` will throw at startup with a shorter key.
+
+### Access Token Expiry
+
+Recommend **60 minutes** for a personal finance app. Rationale: short enough to limit exposure if stolen; long enough that refresh is infrequent on a personal tool. Adjust to 15 min if you implement automatic silent refresh on the client.
+
+### Refresh Token Strategy
+
+**Use Identity's `AspNetUserTokens` table** — no additional packages required:
+
+```csharp
+// Store (on login / refresh)
+await userManager.SetAuthenticationTokenAsync(user, "FinanceTracker", "RefreshToken", newToken);
+
+// Retrieve
+var stored = await userManager.GetAuthenticationTokenAsync(user, "FinanceTracker", "RefreshToken");
+
+// Revoke (on logout)
+await userManager.RemoveAuthenticationTokenAsync(user, "FinanceTracker", "RefreshToken");
+```
+
+Generate the refresh token value with `RandomNumberGenerator.GetHexString(64)` (BCL, no extra package). Store a SHA-256 hash if you want to prevent DB-level theft. Refresh token lifetime: **30 days**.
+
+**Rotation:** Issue a new refresh token every time the old one is exchanged. Remove the old one atomically.
+
+---
+
+## Google OAuth2 Setup
+
+### Flow for a REST API (Redirect-Based)
+
+The `Microsoft.AspNetCore.Authentication.Google` middleware uses the OAuth2 authorization-code flow:
+
+1. Client calls `GET /api/v1/auth/external/google` → controller calls `HttpContext.ChallengeAsync("Google", props)` with a `RedirectUri` pointing to the callback endpoint.
+2. User is redirected to Google's consent screen.
+3. Google redirects back to `/signin-google` (built-in default path).
+4. The app's `/api/v1/auth/external/callback` endpoint reads the external login info via `SignInManager.GetExternalLoginInfoAsync()`, finds or creates the Identity user, and returns a JWT.
+
+### Google Cloud Console Steps
+
+1. Create a project at [console.cloud.google.com](https://console.cloud.google.com)
+2. Configure OAuth Consent Screen → External → add your app name and support email
+3. Credentials → Create OAuth 2.0 Client ID → Web application
+4. Authorized redirect URIs:
+   - Local: `https://localhost:{PORT}/signin-google`
+   - Production: `https://your-domain.com/signin-google`
+5. Copy **Client ID** and **Client Secret** into `user-secrets` / environment variables
+
+---
+
+## Alternatives Considered
+
+| Recommended | Alternative | Why Not |
+|-------------|-------------|---------|
+| `Microsoft.AspNetCore.Authentication.JwtBearer` | Duende IdentityServer / OpenIddict | Full OAuth2/OIDC server — massively overengineered for a single first-party API. Adds an identity provider service, discovery endpoints, consent flows. Use when multiple client apps / resource servers need a central auth authority. |
+| `Microsoft.AspNetCore.Authentication.JwtBearer` | Cookie authentication | Cookies are browser-first and require CSRF protection. JWT bearer is stateless and idiomatic for REST APIs consumed by mobile / SPA clients. PROJECT.md explicitly chose JWT bearer for this reason. |
+| `Microsoft.AspNetCore.Authentication.Google` | `Google.Apis.Auth.AspNetCore3` | The alternative uses Google's own client library designed for server-to-server Google API calls with offline access. For login-only SSO without needing Google API access, the standard `Authentication.Google` middleware is the right tool — simpler, no extra dependencies. |
+| `SymmetricSecurityKey` (HMAC-SHA256) | RSA asymmetric signing | RSA is needed when external services must validate tokens without sharing a secret. A single API issuing and validating its own tokens doesn't need this complexity. |
+| Identity `AspNetUserTokens` for refresh tokens | Redis / in-memory revocation cache | Redis adds infrastructure complexity. For a personal app with low traffic, the DB is sufficient. Use Redis if you need sub-millisecond revocation checks at scale. |
+
+---
+
+## What NOT to Use
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| `Microsoft.IdentityModel.Tokens` version `6.x` | Deprecated — support ended May 2024 (.NET 7 lifetime). May contain unpatched CVEs. | `System.IdentityModel.Tokens.Jwt` 8.17.0 |
+| `AddDefaultIdentity<T>()` | Includes Razor Pages UI scaffolding (login pages, etc.) — irrelevant and adds dead code to a pure API project | `AddIdentity<TUser, TRole>()` — the full service without UI; gives you `RoleManager<T>` too |
+| Hardcoding `Jwt:Key` in `appsettings.json` in source control | Secret exposure in git history | `dotnet user-secrets` for dev; environment variable `JWT__KEY` for production |
+| `ClockSkew = TimeSpan.Zero` | Causes token rejection due to clock drift between servers | `TimeSpan.FromSeconds(30)` — tight but tolerant of minor drift |
+| `[AllowAnonymous]` as the default (no global policy) | Forgetting to add `[Authorize]` to a new endpoint leaks data | Apply a global `AuthorizationPolicy` requiring authenticated users and opt-out specific endpoints with `[AllowAnonymous]` |
+
+---
+
+## Version Compatibility
+
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| `Microsoft.AspNetCore.Identity.EntityFrameworkCore 8.0.15` | `Microsoft.EntityFrameworkCore 8.x` | Requires the same major EF Core version. If existing project uses EF Core 8.x (which it does per PROJECT.md), no conflict. |
+| `Microsoft.AspNetCore.Authentication.JwtBearer 8.0.15` | `System.IdentityModel.Tokens.Jwt 7.x` or `8.x` | JwtBearer 8.0.x ships with a transitive `System.IdentityModel.Tokens.Jwt 7.x`. Explicitly adding `8.17.0` upgrades the transitive dep; this is safe and recommended per the IdentityModel maintainers. |
+| `System.IdentityModel.Tokens.Jwt 8.x` | .NET 8 LTS | Fully supported. `7.x` is also LTS through Nov 2026 on .NET 8, but `8.x` is the forward path. |
+| All three `Microsoft.AspNetCore.*` packages | .NET 8 | Must all be `8.0.x` — mixing major versions (e.g., one at `9.x`) causes assembly binding failures. |
+
+---
+
+## Sources
+
+- NuGet.org — `Microsoft.AspNetCore.Authentication.JwtBearer 8.0.15` — version confirmed HIGH confidence
+- NuGet.org — `Microsoft.AspNetCore.Identity.EntityFrameworkCore 8.0.15` — version confirmed HIGH confidence
+- NuGet.org — `Microsoft.AspNetCore.Authentication.Google 8.0.15` — version confirmed HIGH confidence
+- NuGet.org — `System.IdentityModel.Tokens.Jwt 8.17.0` — version confirmed, lifecycle matrix confirmed HIGH confidence
+- [Microsoft Learn — Google external login setup in ASP.NET Core 8.0](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/social/google-logins?view=aspnetcore-8.0) — OAuth2 flow steps, redirect URI, package choice HIGH confidence
+- [Microsoft Learn — Configure JWT bearer authentication in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-jwt-bearer-authentication?view=aspnetcore-8.0) — `TokenValidationParameters` configuration HIGH confidence
+- [Red Gate Simple Talk — How to use refresh tokens in ASP.NET Core (Mar 2026)](https://www.red-gate.com/simple-talk/development/dotnet-development/how-to-use-refresh-tokens-in-asp-net-core-a-complete-guide/) — refresh token strategy MEDIUM confidence (community source, corroborated by official docs)
+
+---
+
+*Stack research for: Finance Tracker API — v1.1 Authentication & Authorization*
+*Researched: 2026-04-25*
