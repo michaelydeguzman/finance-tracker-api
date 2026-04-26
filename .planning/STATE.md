@@ -48,6 +48,14 @@ See: `.planning/PROJECT.md` (updated 2026-04-25)
 
 - Google OAuth2 requires a Google Cloud project + OAuth2 credentials before implementation.
 
+## Roadmap Evolution
+
+- Phase 1 added: Clean up recurring transaction dead code and reconcile domain projects
+- Phase 2 added: Redesign recurring transaction domain model with template and instance separation
+- Phase 3 added: Fix calendar-based frequency interval logic for monthly, quarterly, and annual recurrences
+- Phase 4 added: Add background service to generate transaction instances from recurring templates
+- Phase 5 added: Add pause, cancel, and skip capabilities for recurring transactions
+
 ## Notes / Context
 
 - Previous milestone (v1.0): TRX-01..TRX-09 complete, archived to `.planning/milestones/`.
