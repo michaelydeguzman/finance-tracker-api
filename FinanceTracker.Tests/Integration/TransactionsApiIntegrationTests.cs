@@ -41,7 +41,6 @@ public class TransactionsApiIntegrationTests : IClassFixture<FinanceTrackerWebAp
             Description = "Dairy",
             Amount = 4.99m,
             TransactionDate = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-            FrequencyId = null,
             CreatedBy = "integration-test"
         };
 
@@ -64,8 +63,7 @@ public class TransactionsApiIntegrationTests : IClassFixture<FinanceTrackerWebAp
             CategoryId = categoryId,
             Description = "Updated",
             Amount = 5.49m,
-            TransactionDate = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
-            FrequencyId = null
+            TransactionDate = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
         };
 
         var putResponse = await _client.PutAsJsonAsync($"/api/v1/transactions/{transactionId}", updateDto, HttpJsonOptions.ForApi);

@@ -32,13 +32,7 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
             builder.Property(e => e.CreatedAt)
                 .IsRequired();
 
-            builder.HasOne(e => e.Frequency)
-                .WithMany(f => f.Transactions)
-                .HasForeignKey(e => e.FrequencyId)
-                .OnDelete(DeleteBehavior.SetNull);
-
             builder.HasIndex(e => e.CategoryId);
-            builder.HasIndex(e => e.FrequencyId);
             builder.HasIndex(e => e.TransactionDate);
             builder.HasIndex(e => e.CreatedAt);
         }

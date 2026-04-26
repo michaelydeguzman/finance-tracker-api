@@ -52,8 +52,7 @@ public class UpdateTransactionCommandHandlerTests
             CategoryId = categoryId,
             Description = "Return",
             Amount = 42m,
-            TransactionDate = DateTime.UtcNow,
-            FrequencyId = null
+            TransactionDate = DateTime.UtcNow
         };
 
         var bareUpdate = new Transaction
@@ -65,7 +64,6 @@ public class UpdateTransactionCommandHandlerTests
             Description = dto.Description,
             Amount = dto.Amount,
             TransactionDate = dto.TransactionDate,
-            FrequencyId = null,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "user"
         };
@@ -81,7 +79,6 @@ public class UpdateTransactionCommandHandlerTests
             Description = dto.Description,
             Amount = dto.Amount,
             TransactionDate = dto.TransactionDate,
-            FrequencyId = null,
             CreatedAt = bareUpdate.CreatedAt,
             CreatedBy = "user"
         });

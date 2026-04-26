@@ -20,5 +20,4 @@ public sealed class UpdateTransactionDto
     [Required]
     public DateTime TransactionDate { get; set; }
 
-    public Guid? FrequencyId { get; set; }
 }

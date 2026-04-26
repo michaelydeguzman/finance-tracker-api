@@ -12,8 +12,6 @@ public sealed class TransactionResponseDto
     public string Description { get; init; } = string.Empty;
     public decimal Amount { get; init; }
     public DateTime TransactionDate { get; init; }
-    public Guid? FrequencyId { get; init; }
-    public string? FrequencyName { get; init; }
     public DateTime CreatedAt { get; init; }
     public string CreatedBy { get; init; } = string.Empty;
 
@@ -28,8 +26,6 @@ public sealed class TransactionResponseDto
             Description = transaction.Description,
             Amount = transaction.Amount,
             TransactionDate = transaction.TransactionDate,
-            FrequencyId = transaction.FrequencyId,
-            FrequencyName = transaction.Frequency?.Name,
             CreatedAt = transaction.CreatedAt,
             CreatedBy = transaction.CreatedBy
         };

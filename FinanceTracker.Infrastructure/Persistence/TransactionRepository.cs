@@ -24,7 +24,6 @@ namespace FinanceTracker.Infrastructure.Persistence
             return await _context.Transactions
                 .AsNoTracking()
                 .Include(x => x.Category)
-                .Include(x => x.Frequency)
                 .FirstOrDefaultAsync(x => x.Id == id);
         }
 
@@ -32,8 +31,7 @@ namespace FinanceTracker.Infrastructure.Persistence
         {
             return _context.Transactions
                 .AsNoTracking()
-                .Include(x => x.Category)
-                .Include(x => x.Frequency);
+                .Include(x => x.Category);
         }
 
         public async Task<List<Transaction>> GetAllAsync()
@@ -54,7 +52,6 @@ namespace FinanceTracker.Infrastructure.Persistence
             entity.Description = transaction.Description;
             entity.Amount = transaction.Amount;
             entity.TransactionDate = transaction.TransactionDate;
-            entity.FrequencyId = transaction.FrequencyId;
 
             await _context.SaveChangesAsync();
             return entity;

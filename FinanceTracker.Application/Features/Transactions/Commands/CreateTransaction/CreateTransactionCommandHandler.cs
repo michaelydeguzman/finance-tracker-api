@@ -25,7 +25,6 @@ public sealed class CreateTransactionCommandHandler : IRequestHandler<CreateTran
             Description = request.Dto.Description ?? string.Empty,
             Amount = request.Dto.Amount,
             TransactionDate = request.Dto.TransactionDate,
-            FrequencyId = request.Dto.FrequencyId,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = request.Dto.CreatedBy
         };

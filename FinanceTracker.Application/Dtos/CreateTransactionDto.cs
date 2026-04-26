@@ -20,8 +20,6 @@ public sealed class CreateTransactionDto
     [Required]
     public DateTime TransactionDate { get; set; }
 
-    public Guid? FrequencyId { get; set; }
-
     [Required]
     [MaxLength(100)]
     public string CreatedBy { get; set; } = string.Empty;

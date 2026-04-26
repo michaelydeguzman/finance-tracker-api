@@ -30,7 +30,6 @@ public class CreateTransactionCommandHandlerTests
             Description = "Morning",
             Amount = 3.50m,
             TransactionDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc),
-            FrequencyId = null,
             CreatedBy = "unit-test"
         };
 
@@ -49,7 +48,6 @@ public class CreateTransactionCommandHandlerTests
                 Description = dto.Description!,
                 Amount = dto.Amount,
                 TransactionDate = dto.TransactionDate,
-                FrequencyId = dto.FrequencyId,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = dto.CreatedBy
             });

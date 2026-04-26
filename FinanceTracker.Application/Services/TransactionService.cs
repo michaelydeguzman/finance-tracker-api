@@ -49,8 +49,7 @@ public class TransactionService : ITransactionService
             Category = null!,
             Description = dto.Description ?? string.Empty,
             Amount = dto.Amount,
-            TransactionDate = dto.TransactionDate,
-            FrequencyId = dto.FrequencyId
+            TransactionDate = dto.TransactionDate
         };
 
         return await _transactionRepository.UpdateAsync(transaction);
