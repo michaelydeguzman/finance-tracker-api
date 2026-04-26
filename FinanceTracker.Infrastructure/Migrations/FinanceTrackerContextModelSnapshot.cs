@@ -161,6 +161,62 @@ namespace FinanceTracker.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.RecurringTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("DefaultAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("FrequencyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<DateTime>("NextOccurrenceDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("StartDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("FrequencyId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("RecurringTransactions");
+                });
+
             modelBuilder.Entity("FinanceTracker.Domain.Entities.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -186,13 +242,13 @@ namespace FinanceTracker.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<Guid?>("FrequencyId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
+
+                    b.Property<Guid?>("RecurringTransactionId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("TransactionDate")
                         .HasColumnType("datetime2");
@@ -203,11 +259,30 @@ namespace FinanceTracker.Infrastructure.Migrations
 
                     b.HasIndex("CreatedAt");
 
-                    b.HasIndex("FrequencyId");
+                    b.HasIndex("RecurringTransactionId");
 
                     b.HasIndex("TransactionDate");
 
                     b.ToTable("Transactions");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.RecurringTransaction", b =>
+                {
+                    b.HasOne("FinanceTracker.Domain.Entities.Category", "Category")
+                        .WithMany("RecurringTransactions")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FinanceTracker.Domain.Entities.Frequency", "Frequency")
+                        .WithMany("RecurringTransactions")
+                        .HasForeignKey("FrequencyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Frequency");
                 });
 
             modelBuilder.Entity("FinanceTracker.Domain.Entities.Transaction", b =>
@@ -218,22 +293,29 @@ namespace FinanceTracker.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("FinanceTracker.Domain.Entities.Frequency", "Frequency")
+                    b.HasOne("FinanceTracker.Domain.Entities.RecurringTransaction", "RecurringTransaction")
                         .WithMany("Transactions")
-                        .HasForeignKey("FrequencyId")
+                        .HasForeignKey("RecurringTransactionId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Category");
 
-                    b.Navigation("Frequency");
+                    b.Navigation("RecurringTransaction");
                 });
 
             modelBuilder.Entity("FinanceTracker.Domain.Entities.Category", b =>
                 {
+                    b.Navigation("RecurringTransactions");
+
                     b.Navigation("Transactions");
                 });
 
             modelBuilder.Entity("FinanceTracker.Domain.Entities.Frequency", b =>
+                {
+                    b.Navigation("RecurringTransactions");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.RecurringTransaction", b =>
                 {
                     b.Navigation("Transactions");
                 });
