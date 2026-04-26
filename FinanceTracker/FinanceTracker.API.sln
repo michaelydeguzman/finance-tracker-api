@@ -5,7 +5,7 @@ VisualStudioVersion = 17.14.37012.4 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FinanceTracker.API", "FinanceTracker.API.csproj", "{B86EE19F-D63E-C0A8-373D-6539DD48F254}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FinanceTracker.Domain", "..\Finance.Tracker.Domain\FinanceTracker.Domain.csproj", "{D4565538-C957-E0E5-933E-AF8159C1211F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FinanceTracker.Domain", "..\FinanceTracker.Domain\FinanceTracker.Domain.csproj", "{D4565538-C957-E0E5-933E-AF8159C1211F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FinanceTracker.Application", "..\FinanceTracker.Application\FinanceTracker.Application.csproj", "{31BCA973-67D2-2A44-2015-2E7A19534BE8}"
 EndProject
