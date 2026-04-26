@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-04-26T08:12:12.126Z"
+status: Phase complete — ready for verification
+last_updated: "2026-04-26T08:16:40.579Z"
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # STATE — Finance Tracker API
@@ -25,13 +25,13 @@ See: `.planning/PROJECT.md` (updated 2026-04-25)
 
 ## Current Position
 
-Phase: 02 (redesign-recurring-transaction-domain-model-with-template-and-instance-separation) — EXECUTING
+Phase: 02 (redesign-recurring-transaction-domain-model-with-template-and-instance-separation) — COMPLETE (ready for verification)
 Plan: 2 of 2
 
-- **Phase**: In progress — Plan 01 complete, Plan 02 pending
-- **Plan**: 02-01-PLAN.md executed 2026-04-26
-- **Status**: executing_plan_02
-- **Last activity**: 2026-04-26 — Phase 02 Plan 01 executed; RecurringTransaction entity introduced, all FrequencyId refs scrubbed, build 0 errors
+- **Phase**: Complete — both plans executed, 25 tests pass
+- **Plan**: 02-02-PLAN.md executed 2026-04-26
+- **Status**: ready_for_verification
+- **Last activity**: 2026-04-26 — Phase 02 Plan 02 executed; RecurringTransactionConfiguration, EF migration with D-09 data-nulling SQL, and 4 domain model tests added. 25 tests pass.
 
 ## Phase Tracking
 
@@ -41,6 +41,7 @@ Plan: 2 of 2
 
 ## Decisions (sticky)
 
+- **[Phase 02-Plan02]** EF Core RenameColumn accepted for FrequencyId→RecurringTransactionId — more correct than DropColumn/AddColumn; data-nulling SQL precedes all DDL per D-09.
 - **[Phase 02-Plan01]** RecurringTransactionStatus: Active/Paused/Cancelled (no Completed) — background service advances NextOccurrenceDate per D-05.
 - **[Phase 02-Plan01]** Transaction.RecurringTransaction is nullable (no `required`) — nullable nav properties never use required keyword.
 - JWT bearer tokens (not cookies) — API-first, stateless auth.
