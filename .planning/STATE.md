@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-last_updated: "2026-04-26T07:21:40.082Z"
+status: Ready to execute
+last_updated: "2026-04-26T08:12:12.126Z"
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 5
+  completed_plans: 4
 ---
 
 # STATE — Finance Tracker API
 
-**Last updated:** 2026-04-25
+**Last updated:** 2026-04-26
 
 ## Project Reference
 
@@ -25,13 +25,13 @@ See: `.planning/PROJECT.md` (updated 2026-04-25)
 
 ## Current Position
 
-Phase: 02
-Plan: Not started
+Phase: 02 (redesign-recurring-transaction-domain-model-with-template-and-instance-separation) — EXECUTING
+Plan: 2 of 2
 
-- **Phase**: Complete — all plans executed, ready for verification
-- **Plan**: 01-01-PLAN.md executed 2026-04-26
-- **Status**: ready_for_verification
-- **Last activity**: 2026-04-26 — Phase 01 Plan 01 executed; build and 21 tests green
+- **Phase**: In progress — Plan 01 complete, Plan 02 pending
+- **Plan**: 02-01-PLAN.md executed 2026-04-26
+- **Status**: executing_plan_02
+- **Last activity**: 2026-04-26 — Phase 02 Plan 01 executed; RecurringTransaction entity introduced, all FrequencyId refs scrubbed, build 0 errors
 
 ## Phase Tracking
 
@@ -41,6 +41,8 @@ Plan: Not started
 
 ## Decisions (sticky)
 
+- **[Phase 02-Plan01]** RecurringTransactionStatus: Active/Paused/Cancelled (no Completed) — background service advances NextOccurrenceDate per D-05.
+- **[Phase 02-Plan01]** Transaction.RecurringTransaction is nullable (no `required`) — nullable nav properties never use required keyword.
 - JWT bearer tokens (not cookies) — API-first, stateless auth.
 - Google OAuth2 via ASP.NET Core Identity external logins.
 - Auto-verify on registration — no email verification step this milestone.
