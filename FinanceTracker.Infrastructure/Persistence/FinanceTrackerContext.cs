@@ -12,6 +12,7 @@ namespace FinanceTracker.Infrastructure.Persistence
         public DbSet<Category> Categories { get; set; }
         public DbSet<Frequency> Frequencies { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
+        public DbSet<RecurringTransaction> RecurringTransactions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
