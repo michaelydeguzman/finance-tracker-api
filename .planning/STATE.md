@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-last_updated: "2026-04-27T06:36:48.091Z"
+status: Ready to execute
+last_updated: "2026-04-27T07:34:01.976Z"
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
 ---
 
 # STATE — Finance Tracker API
 
-**Last updated:** 2026-04-26
+**Last updated:** 2026-04-27
 
 ## Project Reference
 
@@ -25,13 +25,13 @@ See: `.planning/PROJECT.md` (updated 2026-04-25)
 
 ## Current Position
 
-Phase: 04
-Plan: Not started
+Phase: 04 (add-background-service-to-generate-transaction-instances-from-recurring-templates) — EXECUTING
+Plan: 2 of 2
 
-- **Phase**: Complete — RecurrenceCalculator implemented with snap-back anchoring; 37 tests pass
-- **Plan**: 03-01-PLAN.md executed 2026-04-27
-- **Status**: ready_for_verification
-- **Last activity**: 2026-04-27 — Phase 03 Plan 01 executed; RecurrenceCalculator.cs and RecurrenceCalculatorTests.cs added. 37 tests pass (25 existing + 12 new).
+- **Phase**: In progress — Worker scaffold complete; Plan 02 TDD implementation pending
+- **Plan**: 04-01-PLAN.md executed 2026-04-27
+- **Status**: ready_for_plan_02
+- **Last activity**: 2026-04-27 — Phase 04 Plan 01 executed; IRecurringTransactionRepository, RecurringTransactionRepository, and FinanceTracker.Worker console app scaffold added. 37 tests pass (no regressions).
 
 ## Phase Tracking
 
@@ -41,6 +41,8 @@ Plan: Not started
 
 ## Decisions (sticky)
 
+- **[Phase 04-Plan01]** No `.AsNoTracking()` on `GetActiveOverdueAsync` — EF change tracking required so `TransactionGenerationService` can mutate `NextOccurrenceDate` and call `SaveChangesAsync` (Pitfall 2 from RESEARCH.md).
+- **[Phase 04-Plan01]** `Microsoft.NET.Sdk` (not `Sdk.Worker`) for Worker project — run-and-exit console pattern, not persistent hosted service (D-01/D-02).
 - **[Phase 03-Plan01]** `targetDay = startDate.Day` is the snap-back anchor — prevents drift after short-month clamping (D-03); never use `currentDate.Day`.
 - **[Phase 03-Plan01]** 7-arg DateTime constructor preserves DateTimeKind through snap-back calculation — 3-arg overload would silently produce Unspecified.
 - **[Phase 03-Plan01]** Default switch arm throws ArgumentOutOfRangeException — future FrequencyType additions fail fast instead of silent wrong output.

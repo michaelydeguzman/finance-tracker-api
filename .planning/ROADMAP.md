@@ -57,10 +57,10 @@ Plans:
 **Goal:** Create a standalone `FinanceTracker.Worker` console application that queries `Active` recurring transaction templates with `NextOccurrenceDate <= now`, generates `Transaction` instances from them (including catch-up for all missed occurrences), and advances `NextOccurrenceDate` on each template via `RecurrenceCalculator` — with per-template error isolation and `EndDate` boundary enforcement. Triggered externally by Windows Task Scheduler.
 **Requirements**: none (no formal requirement IDs — implementation of locked decisions D-01..D-15 from CONTEXT.md)
 **Depends on:** Phase 3
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 04-01-PLAN.md — Bootstrap: IRecurringTransactionRepository + RecurringTransactionRepository in Infrastructure; create FinanceTracker.Worker project (csproj, appsettings.json, Program.cs DI wiring, stub TransactionGenerationService); add to solution + Tests reference
+- [x] 04-01-PLAN.md — Bootstrap: IRecurringTransactionRepository + RecurringTransactionRepository in Infrastructure; create FinanceTracker.Worker project (csproj, appsettings.json, Program.cs DI wiring, stub TransactionGenerationService); add to solution + Tests reference
 - [ ] 04-02-PLAN.md — TDD: Write 10 failing tests (RED) covering D-04..D-15; implement full TransactionGenerationService.RunAsync + GenerateForTemplateAsync (GREEN); 47 total tests pass
 
 ### Phase 5: Add pause, cancel, and skip capabilities for recurring transactions
