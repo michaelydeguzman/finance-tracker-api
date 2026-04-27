@@ -44,13 +44,13 @@ Plans:
 
 ### Phase 3: Fix calendar-based frequency interval logic for monthly, quarterly, and annual recurrences
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Implement `RecurrenceCalculator` as a pure static class in `FinanceTracker.Domain/Services/` that computes the next occurrence `DateTime` for all 8 `FrequencyType` values — using snap-back anchoring (derived from `StartDate.Day`) for calendar-based types so month-end dates never drift after passing through February — and verify correctness with 12 unit tests (8 happy-path + 4 edge cases).
+**Requirements**: none (no formal requirement IDs — pure domain logic addition)
 **Depends on:** Phase 2
-**Plans:** 0 plans
+**Plans:** 1 plan
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 3 to break down)
+- [ ] 03-01-PLAN.md — Create RecurrenceCalculatorTests.cs (12 failing tests, RED) + implement RecurrenceCalculator with snap-back anchoring (GREEN)
 
 ### Phase 4: Add background service to generate transaction instances from recurring templates
 
