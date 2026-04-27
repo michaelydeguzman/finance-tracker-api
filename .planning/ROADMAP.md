@@ -50,7 +50,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 03-01-PLAN.md — Create RecurrenceCalculatorTests.cs (12 failing tests, RED) + implement RecurrenceCalculator with snap-back anchoring (GREEN)
+- [x] 03-01-PLAN.md — Create RecurrenceCalculatorTests.cs (12 failing tests, RED) + implement RecurrenceCalculator with snap-back anchoring (GREEN)
 
 ### Phase 4: Add background service to generate transaction instances from recurring templates
 

@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-last_updated: "2026-04-26T08:20:06.005Z"
+status: Phase complete — ready for verification
+last_updated: "2026-04-27T06:33:37.100Z"
 progress:
   total_phases: 6
-  completed_phases: 3
-  total_plans: 5
-  completed_plans: 5
+  completed_phases: 4
+  total_plans: 6
+  completed_plans: 6
 ---
 
 # STATE — Finance Tracker API
@@ -25,13 +25,13 @@ See: `.planning/PROJECT.md` (updated 2026-04-25)
 
 ## Current Position
 
-Phase: 03
-Plan: Not started
+Phase: 03 (fix-calendar-based-frequency-interval-logic-for-monthly-quarterly-and-annual-recurrences) — COMPLETE
+Plan: 1 of 1 (all plans executed)
 
-- **Phase**: Complete — both plans executed, 25 tests pass
-- **Plan**: 02-02-PLAN.md executed 2026-04-26
+- **Phase**: Complete — RecurrenceCalculator implemented with snap-back anchoring; 37 tests pass
+- **Plan**: 03-01-PLAN.md executed 2026-04-27
 - **Status**: ready_for_verification
-- **Last activity**: 2026-04-26 — Phase 02 Plan 02 executed; RecurringTransactionConfiguration, EF migration with D-09 data-nulling SQL, and 4 domain model tests added. 25 tests pass.
+- **Last activity**: 2026-04-27 — Phase 03 Plan 01 executed; RecurrenceCalculator.cs and RecurrenceCalculatorTests.cs added. 37 tests pass (25 existing + 12 new).
 
 ## Phase Tracking
 
@@ -41,6 +41,9 @@ Plan: Not started
 
 ## Decisions (sticky)
 
+- **[Phase 03-Plan01]** `targetDay = startDate.Day` is the snap-back anchor — prevents drift after short-month clamping (D-03); never use `currentDate.Day`.
+- **[Phase 03-Plan01]** 7-arg DateTime constructor preserves DateTimeKind through snap-back calculation — 3-arg overload would silently produce Unspecified.
+- **[Phase 03-Plan01]** Default switch arm throws ArgumentOutOfRangeException — future FrequencyType additions fail fast instead of silent wrong output.
 - **[Phase 02-Plan02]** EF Core RenameColumn accepted for FrequencyId→RecurringTransactionId — more correct than DropColumn/AddColumn; data-nulling SQL precedes all DDL per D-09.
 - **[Phase 02-Plan01]** RecurringTransactionStatus: Active/Paused/Cancelled (no Completed) — background service advances NextOccurrenceDate per D-05.
 - **[Phase 02-Plan01]** Transaction.RecurringTransaction is nullable (no `required`) — nullable nav properties never use required keyword.
