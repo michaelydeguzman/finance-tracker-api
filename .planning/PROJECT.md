@@ -58,6 +58,7 @@ Users can reliably record and retrieve transactions with flexible filtering for 
 - **Phase 01 complete:** Dead `FinanceTracker.Domain/` draft project purged; live `Finance.Tracker.Domain/` renamed to `FinanceTracker.Domain/` — all projects now follow `FinanceTracker.*` naming. Solution builds 0 errors/warnings, 21 tests pass.
 - **Phase 02 complete:** `RecurringTransaction` template entity introduced with its own `RecurringTransactions` table; `Transaction.FrequencyId` removed; nullable `RecurringTransactionId` FK wired; EF Core migration safely nulls existing FrequencyId data. Build: 0 errors/warnings, 25 tests pass.
 - **Phase 03 complete:** `RecurrenceCalculator` pure static class added to `FinanceTracker.Domain/Services/`; snap-back anchoring (`targetDay = startDate.Day`) prevents month-end drift; all 8 `FrequencyType` values handled; 12 new tests + 25 prior = 37 total pass.
+- **Phase 04 complete:** `FinanceTracker.Worker` console app scaffolded with `IRecurringTransactionRepository` + `RecurringTransactionRepository` (EF Core eager-loading, no `AsNoTracking`); full `TransactionGenerationService` implements catch-up loop (D-04), EndDate boundary (D-13), NextOccurrenceDate advancement via `RecurrenceCalculator` (D-14), per-template error isolation with EF context cleanup (D-15), and all field-mapping decisions (D-07..D-12); 10 new TDD tests + 37 prior = 47 total pass.
 - Known technical debt: none recorded from v1.0.
 
 ## Constraints
@@ -100,4 +101,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-27 after Phase 03 completion*
+*Last updated: 2026-04-27 after Phase 04 completion*
