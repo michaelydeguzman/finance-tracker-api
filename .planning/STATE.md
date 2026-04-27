@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-04-27T07:34:01.976Z"
+status: Phase complete — ready for verification
+last_updated: "2026-04-27T07:55:01.179Z"
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # STATE — Finance Tracker API
@@ -25,13 +25,13 @@ See: `.planning/PROJECT.md` (updated 2026-04-25)
 
 ## Current Position
 
-Phase: 04 (add-background-service-to-generate-transaction-instances-from-recurring-templates) — EXECUTING
+Phase: 04 (add-background-service-to-generate-transaction-instances-from-recurring-templates) — COMPLETE
 Plan: 2 of 2
 
-- **Phase**: In progress — Worker scaffold complete; Plan 02 TDD implementation pending
-- **Plan**: 04-01-PLAN.md executed 2026-04-27
-- **Status**: ready_for_plan_02
-- **Last activity**: 2026-04-27 — Phase 04 Plan 01 executed; IRecurringTransactionRepository, RecurringTransactionRepository, and FinanceTracker.Worker console app scaffold added. 37 tests pass (no regressions).
+- **Phase**: Complete — both plans executed; ready for verification
+- **Plan**: 04-02-PLAN.md executed 2026-04-27
+- **Status**: ready_for_verification
+- **Last activity**: 2026-04-27 — Phase 04 Plan 02 executed; TransactionGenerationService fully implemented (D-04..D-15), 10 new unit tests added (TDD RED→GREEN), 47 total tests pass (no regressions).
 
 ## Phase Tracking
 
@@ -41,6 +41,9 @@ Plan: 2 of 2
 
 ## Decisions (sticky)
 
+- **[Phase 04-Plan02]** `DateTime.UtcNow.AddDays(-N).AddMinutes(5)` buffer in TDD tests prevents catch-up loop over-counting from sub-millisecond clock drift between test setup and service execution.
+- **[Phase 04-Plan02]** `EntityState.Detached` cleanup in `RunAsync` catch block provides true D-15 per-template isolation — prevents Added-but-unsaved Transaction rows from leaking into subsequent templates' `SaveChangesAsync`.
+- **[Phase 04-Plan02]** `Category = null!` on new Transaction — C# `required` keyword satisfied with null-forgiveness; EF Core does not validate required nav properties at `Add()` time.
 - **[Phase 04-Plan01]** No `.AsNoTracking()` on `GetActiveOverdueAsync` — EF change tracking required so `TransactionGenerationService` can mutate `NextOccurrenceDate` and call `SaveChangesAsync` (Pitfall 2 from RESEARCH.md).
 - **[Phase 04-Plan01]** `Microsoft.NET.Sdk` (not `Sdk.Worker`) for Worker project — run-and-exit console pattern, not persistent hosted service (D-01/D-02).
 - **[Phase 03-Plan01]** `targetDay = startDate.Day` is the snap-back anchor — prevents drift after short-month clamping (D-03); never use `currentDate.Day`.
