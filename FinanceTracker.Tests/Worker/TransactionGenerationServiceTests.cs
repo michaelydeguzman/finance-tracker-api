@@ -60,7 +60,9 @@ public class TransactionGenerationServiceTests
     public async Task RunAsync_SingleActiveOverdueTemplate_GeneratesOneTransaction()
     {
         using var context = CreateInMemoryContext();
-        var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1));
+        // AddMinutes(5) ensures NextOccurrenceDate advances into the future (now + 5 min) after 1 daily cycle,
+        // preventing the while-loop from firing a spurious extra iteration due to sub-millisecond clock drift.
+        var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1).AddMinutes(5));
         var originalDate = template.NextOccurrenceDate;
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
@@ -80,7 +82,8 @@ public class TransactionGenerationServiceTests
     public async Task RunAsync_MultipleOverdueOccurrences_GeneratesAllMissed()
     {
         using var context = CreateInMemoryContext();
-        var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-3));
+        // AddMinutes(5): after 3 daily advances, NextOccurrenceDate = now + 5 min — loop stops at exactly 3.
+        var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-3).AddMinutes(5));
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
         mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
@@ -147,7 +150,7 @@ public class TransactionGenerationServiceTests
         using var context = CreateInMemoryContext();
         var template = CreateTemplate(
             RecurringTransactionStatus.Active,
-            DateTime.UtcNow.AddDays(-1),
+            DateTime.UtcNow.AddDays(-1).AddMinutes(5),
             name: "Rent",
             defaultAmount: 1200m,
             createdBy: "test-user");
@@ -174,7 +177,8 @@ public class TransactionGenerationServiceTests
     public async Task RunAsync_AfterGeneration_AdvancesNextOccurrenceDateOnTemplate()
     {
         using var context = CreateInMemoryContext();
-        var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1));
+        // AddMinutes(5): after 1 daily advance, NextOccurrenceDate = now + 5 min, satisfying BeAfter(DateTime.UtcNow).
+        var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1).AddMinutes(5));
         var originalDate = template.NextOccurrenceDate;
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
@@ -195,11 +199,12 @@ public class TransactionGenerationServiceTests
         using var context = CreateInMemoryContext();
         // NextOccurrenceDate is overdue (outer while fires) but past EndDate (now-2).
         // Forces the D-13 inner guard to be reached — an impl that omits the guard would generate a transaction and fail.
-        var endDate = DateTime.UtcNow.AddDays(-2);
+        // AddMinutes(5) applied to both dates preserves the invariant nextOccurrenceDate > endDate (D-13 trigger).
+        var endDate = DateTime.UtcNow.AddDays(-2).AddMinutes(5);
         var template = CreateTemplate(
             RecurringTransactionStatus.Active,
-            nextOccurrenceDate: DateTime.UtcNow.AddDays(-1), // overdue: outer while fires
-            endDate: endDate);                                // EndDate is earlier: inner D-13 guard triggers break
+            nextOccurrenceDate: DateTime.UtcNow.AddDays(-1).AddMinutes(5), // overdue: outer while fires
+            endDate: endDate);                                               // EndDate is earlier: inner D-13 guard triggers break
         var originalNextDate = template.NextOccurrenceDate;
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
@@ -219,8 +224,9 @@ public class TransactionGenerationServiceTests
     public async Task RunAsync_LastOccurrenceOnEndDate_GeneratesAndAdvances()
     {
         using var context = CreateInMemoryContext();
-        // NextOccurrenceDate <= EndDate AND <= now — the last allowed occurrence
-        var occurrenceDate = DateTime.UtcNow.AddDays(-1);
+        // NextOccurrenceDate <= EndDate AND <= now — the last allowed occurrence.
+        // AddMinutes(5): after 1 advance, NextOccurrenceDate = now + 5 min > EndDate, confirming D-14 advancement.
+        var occurrenceDate = DateTime.UtcNow.AddDays(-1).AddMinutes(5);
         var template = CreateTemplate(
             RecurringTransactionStatus.Active,
             nextOccurrenceDate: occurrenceDate,
@@ -243,7 +249,8 @@ public class TransactionGenerationServiceTests
     {
         using var context = CreateInMemoryContext();
 
-        // Bad template: Frequency is null — causes NullReferenceException when service reads template.Frequency.Type
+        // Bad template: Frequency is null — causes NullReferenceException when service reads template.Frequency.Type.
+        // AddMinutes(5) ensures the good template's loop also runs exactly once (same buffer logic as other tests).
         var badTemplate = new RecurringTransaction
         {
             Id = Guid.NewGuid(),
@@ -254,12 +261,12 @@ public class TransactionGenerationServiceTests
             FrequencyId = Guid.NewGuid(),
             Frequency = null!, // intentionally null to force NullReferenceException — tests D-15
             StartDate = DateTime.UtcNow.AddMonths(-1),
-            NextOccurrenceDate = DateTime.UtcNow.AddDays(-1),
+            NextOccurrenceDate = DateTime.UtcNow.AddDays(-1).AddMinutes(5),
             Status = RecurringTransactionStatus.Active,
             CreatedBy = "test-user"
         };
 
-        var goodTemplate = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1));
+        var goodTemplate = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1).AddMinutes(5));
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
         mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
