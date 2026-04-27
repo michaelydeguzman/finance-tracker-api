@@ -28,6 +28,7 @@
   <ItemGroup>
     <ProjectReference Include="..\FinanceTracker\FinanceTracker.API.csproj" />
     <ProjectReference Include="..\FinanceTracker.Application\FinanceTracker.Application.csproj" />
+    <ProjectReference Include="..\FinanceTracker.Worker\FinanceTracker.Worker.csproj" />
   </ItemGroup>
 
 </Project>
