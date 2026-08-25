@@ -14,6 +14,7 @@ var host = Host.CreateDefaultBuilder(args)
                 context.Configuration.GetConnectionString("FinanceTrackerDB")));
 
         services.AddScoped<IRecurringTransactionRepository, RecurringTransactionRepository>();
+        services.AddScoped<IRunLock, SqlServerRunLock>();
         services.AddScoped<TransactionGenerationService>();
     })
     .Build();
