@@ -1,6 +1,8 @@
+using System.Data;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Domain.Services;
 using FinanceTracker.Infrastructure.Persistence;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -8,6 +10,14 @@ namespace FinanceTracker.Worker.Services;
 
 public class TransactionGenerationService
 {
+    private const string RunLockResource = "FinanceTracker:TransactionGenerationService:Run";
+
+    // Safety valve for templates that have gone unprocessed for a very long time
+    // (e.g. worker down for months, or a short Custom interval never run). Without a cap,
+    // a single template could stage an unbounded number of tracked entities before the
+    // one SaveChangesAsync call. Remaining occurrences are picked up on the next run.
+    private const int MaxOccurrencesPerTemplatePerRun = 500;
+
     private readonly FinanceTrackerContext _context;
     private readonly IRecurringTransactionRepository _recurringRepo;
     private readonly ILogger<TransactionGenerationService> _logger;
@@ -24,31 +34,85 @@ public class TransactionGenerationService
 
     public async Task RunAsync()
     {
-        var now = DateTime.UtcNow;
-        var templates = await _recurringRepo.GetActiveOverdueAsync(now);
+        var connection = _context.Database.GetDbConnection();
+        await connection.OpenAsync();
 
-        _logger.LogInformation("Found {Count} active overdue recurring template(s)", templates.Count);
-
-        foreach (var template in templates)
+        // Guards against overlapping worker runs (e.g. a scheduled invocation firing while a
+        // previous slow run is still in progress) generating duplicate transactions for the
+        // same overdue template. Session-scoped so it's held for the whole run, independent of
+        // the per-template SaveChangesAsync calls below.
+        if (!await TryAcquireRunLockAsync(connection))
         {
-            try
-            {
-                await GenerateForTemplateAsync(template, now);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to generate transactions for template {TemplateId}", template.Id);
+            _logger.LogWarning("Another {Service} run is already in progress; skipping this run.", nameof(TransactionGenerationService));
+            return;
+        }
 
-                // D-15: Detach any Transaction entities that were Added-but-not-yet-saved for this template.
-                // Without this, a partial failure (e.g. exception thrown after Add() but before SaveChangesAsync())
-                // would cause those orphaned rows to be committed by the next successful template's SaveChangesAsync().
-                var unsaved = _context.ChangeTracker.Entries()
-                    .Where(e => e.State == EntityState.Added)
-                    .ToList();
-                foreach (var entry in unsaved)
-                    entry.State = EntityState.Detached;
+        try
+        {
+            var now = DateTime.UtcNow;
+            var templates = await _recurringRepo.GetActiveOverdueAsync(now);
+
+            _logger.LogInformation("Found {Count} active overdue recurring template(s)", templates.Count);
+
+            foreach (var template in templates)
+            {
+                try
+                {
+                    await GenerateForTemplateAsync(template, now);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to generate transactions for template {TemplateId}", template.Id);
+
+                    // D-15: Revert the template's NextOccurrenceDate mutation and detach any
+                    // Transaction entities that were Added-but-not-yet-saved for this template.
+                    // Without reverting the template too, its advanced (but unsaved) date would
+                    // stay tracked as Modified and be silently committed by the next successful
+                    // template's SaveChangesAsync, permanently skipping the failed occurrences.
+                    var templateEntry = _context.Entry(template);
+                    templateEntry.CurrentValues.SetValues(templateEntry.OriginalValues);
+                    templateEntry.State = EntityState.Unchanged;
+
+                    var unsaved = _context.ChangeTracker.Entries()
+                        .Where(e => e.State == EntityState.Added)
+                        .ToList();
+                    foreach (var entry in unsaved)
+                        entry.State = EntityState.Detached;
+                }
             }
         }
+        finally
+        {
+            await ReleaseRunLockAsync(connection);
+        }
+    }
+
+    private static async Task<bool> TryAcquireRunLockAsync(IDbConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "sp_getapplock";
+        command.CommandType = CommandType.StoredProcedure;
+        command.Parameters.Add(new SqlParameter("@Resource", RunLockResource));
+        command.Parameters.Add(new SqlParameter("@LockMode", "Exclusive"));
+        command.Parameters.Add(new SqlParameter("@LockOwner", "Session"));
+        command.Parameters.Add(new SqlParameter("@LockTimeout", 0));
+        var returnValue = new SqlParameter { Direction = ParameterDirection.ReturnValue };
+        command.Parameters.Add(returnValue);
+
+        await ((SqlCommand)command).ExecuteNonQueryAsync();
+
+        return (int)returnValue.Value! >= 0;
+    }
+
+    private static async Task ReleaseRunLockAsync(IDbConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "sp_releaseapplock";
+        command.CommandType = CommandType.StoredProcedure;
+        command.Parameters.Add(new SqlParameter("@Resource", RunLockResource));
+        command.Parameters.Add(new SqlParameter("@LockOwner", "Session"));
+
+        await ((SqlCommand)command).ExecuteNonQueryAsync();
     }
 
     private async Task GenerateForTemplateAsync(RecurringTransaction template, DateTime now)
@@ -63,6 +127,14 @@ public class TransactionGenerationService
             // Do NOT change template.Status.
             if (template.EndDate.HasValue && template.NextOccurrenceDate > template.EndDate.Value)
                 break;
+
+            if (count >= MaxOccurrencesPerTemplatePerRun)
+            {
+                _logger.LogWarning(
+                    "Template {TemplateId} hit the per-run cap of {Cap} generated occurrence(s); remaining backlog will be picked up on the next run.",
+                    template.Id, MaxOccurrencesPerTemplatePerRun);
+                break;
+            }
 
             var transaction = new Transaction
             {

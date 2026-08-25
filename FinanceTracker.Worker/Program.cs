@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var host = Host.CreateDefaultBuilder(args)
+    .ConfigureAppConfiguration(config => config.AddUserSecrets<Program>(optional: true))
     .ConfigureServices((context, services) =>
     {
         services.AddDbContext<FinanceTrackerContext>(options =>

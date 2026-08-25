@@ -22,9 +22,11 @@ public static class RecurrenceCalculator
             FrequencyType.SemiAnnually => AddMonthsWithSnapBack(currentDate, targetDay, 6),
             FrequencyType.Annually     => AddMonthsWithSnapBack(currentDate, targetDay, 12),
             FrequencyType.Custom       => currentDate.AddDays(
-                                             intervalDays ?? throw new ArgumentException(
-                                                 "IntervalDays must be set for Custom frequency.",
-                                                 nameof(intervalDays))),
+                                             intervalDays is > 0
+                                                 ? intervalDays.Value
+                                                 : throw new ArgumentException(
+                                                     "IntervalDays must be a positive number of days for Custom frequency.",
+                                                     nameof(intervalDays))),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unhandled FrequencyType.")
         };
     }
