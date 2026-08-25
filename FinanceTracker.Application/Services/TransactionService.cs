@@ -8,11 +8,16 @@ public class TransactionService : ITransactionService
 {
     private readonly ITransactionRepository _transactionRepository;
     private readonly ICategoryRepository _categoryRepository;
+    private readonly ICurrentUserAccessor _currentUser;
 
-    public TransactionService(ITransactionRepository transactionRepository, ICategoryRepository categoryRepository)
+    public TransactionService(
+        ITransactionRepository transactionRepository,
+        ICategoryRepository categoryRepository,
+        ICurrentUserAccessor currentUser)
     {
         _transactionRepository = transactionRepository;
         _categoryRepository = categoryRepository;
+        _currentUser = currentUser;
     }
 
     public async Task<Transaction> AddTransactionAsync(Transaction transaction)
@@ -47,6 +52,7 @@ public class TransactionService : ITransactionService
             Name = dto.Name,
             CategoryId = dto.CategoryId,
             Category = null!,
+            UserId = _currentUser.RequireUserId(),
             Description = dto.Description ?? string.Empty,
             Amount = dto.Amount,
             TransactionDate = dto.TransactionDate

@@ -42,6 +42,7 @@ public class UpdateTransactionCommandHandlerTests
             Id = categoryId,
             Name = "Travel",
             CategoryType = CategoryType.Expense,
+            UserId = TestCurrentUserAccessor.DefaultUserId,
             CreatedAt = DateTime.UtcNow,
             IsActive = true
         };
@@ -61,6 +62,7 @@ public class UpdateTransactionCommandHandlerTests
             Name = dto.Name,
             CategoryId = categoryId,
             Category = null!,
+            UserId = TestCurrentUserAccessor.DefaultUserId,
             Description = dto.Description,
             Amount = dto.Amount,
             TransactionDate = dto.TransactionDate,
@@ -76,6 +78,7 @@ public class UpdateTransactionCommandHandlerTests
             Name = dto.Name,
             CategoryId = categoryId,
             Category = category,
+            UserId = TestCurrentUserAccessor.DefaultUserId,
             Description = dto.Description,
             Amount = dto.Amount,
             TransactionDate = dto.TransactionDate,

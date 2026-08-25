@@ -8,10 +8,12 @@ namespace FinanceTracker.Application.Features.Categories.Commands.CreateCategory
 public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategoryCommand, CategoryResponseDto>
 {
     private readonly ICategoryService _categoryService;
+    private readonly ICurrentUserAccessor _currentUser;
 
-    public CreateCategoryCommandHandler(ICategoryService categoryService)
+    public CreateCategoryCommandHandler(ICategoryService categoryService, ICurrentUserAccessor currentUser)
     {
         _categoryService = categoryService;
+        _currentUser = currentUser;
     }
 
     public async Task<CategoryResponseDto> Handle(CreateCategoryCommand request, CancellationToken cancellationToken)
@@ -21,6 +23,7 @@ public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategor
             Id = Guid.NewGuid(),
             Name = request.Dto.Name,
             CategoryType = request.Dto.CategoryType,
+            UserId = _currentUser.RequireUserId(),
             CreatedAt = DateTime.UtcNow,
             IsActive = true
         };

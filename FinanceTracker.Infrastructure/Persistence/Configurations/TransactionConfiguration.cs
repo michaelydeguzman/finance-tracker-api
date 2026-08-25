@@ -32,9 +32,18 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
             builder.Property(e => e.CreatedAt)
                 .IsRequired();
 
-            builder.HasIndex(e => e.CategoryId);
-            builder.HasIndex(e => e.TransactionDate);
-            builder.HasIndex(e => e.CreatedAt);
+            // Restrict, not Cascade: deleting a user must be a deliberate, explicit
+            // purge of their financial records, never a silent side effect.
+            builder.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Tenant-leading composites replace the old single-column indexes: with a
+            // UserId filter on every query, a bare TransactionDate index is unusable.
+            builder.HasIndex(e => new { e.UserId, e.TransactionDate });
+            builder.HasIndex(e => new { e.UserId, e.CategoryId });
+            builder.HasIndex(e => new { e.UserId, e.CreatedAt });
         }
     }
 }

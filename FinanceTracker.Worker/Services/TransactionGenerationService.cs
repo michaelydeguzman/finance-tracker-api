@@ -142,6 +142,7 @@ public class TransactionGenerationService
                 Name = template.Name,                           // D-08
                 CategoryId = template.CategoryId,               // D-10 (FK only)
                 Category = null!,                               // nav property not set — EF Core does not validate at Add() time
+                UserId = template.UserId,                       // tenancy: generated rows inherit the template's owner
                 Amount = template.DefaultAmount,                 // D-09
                 TransactionDate = template.NextOccurrenceDate,  // D-07: scheduled date, not wall-clock run time
                 RecurringTransactionId = template.Id,           // D-11

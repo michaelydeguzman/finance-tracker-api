@@ -17,7 +17,7 @@ public class RecurringTransactionDomainModelTests
         var nextOccurrenceDate = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);
         var createdAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        var category = new Category { Id = categoryId, Name = "Bills", CategoryType = CategoryType.Expense };
+        var category = new Category { Id = categoryId, Name = "Bills", CategoryType = CategoryType.Expense, UserId = TestCurrentUserAccessor.DefaultUserId };
         var frequency = new Frequency { Id = frequencyId, Name = "Monthly", Type = FrequencyType.Monthly };
 
         var entity = new RecurringTransaction
@@ -28,6 +28,7 @@ public class RecurringTransactionDomainModelTests
             DefaultAmount = 1200.00m,
             CategoryId = categoryId,
             Category = category,
+            UserId = TestCurrentUserAccessor.DefaultUserId,
             FrequencyId = frequencyId,
             Frequency = frequency,
             StartDate = startDate,
@@ -83,6 +84,7 @@ public class RecurringTransactionDomainModelTests
                 Id = categoryId,
                 Name = "Utilities",
                 CategoryType = CategoryType.Expense,
+                UserId = TestCurrentUserAccessor.DefaultUserId,
                 CreatedAt = DateTime.UtcNow
             });
 
@@ -107,6 +109,7 @@ public class RecurringTransactionDomainModelTests
                 DefaultAmount = 85.50m,
                 CategoryId = categoryId,
                 Category = context.Categories.Find(categoryId)!,
+                UserId = TestCurrentUserAccessor.DefaultUserId,
                 FrequencyId = frequencyId,
                 Frequency = context.Frequencies.Find(frequencyId)!,
                 StartDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -150,6 +153,7 @@ public class RecurringTransactionDomainModelTests
                 Id = categoryId,
                 Name = "Food",
                 CategoryType = CategoryType.Expense,
+                UserId = TestCurrentUserAccessor.DefaultUserId,
                 CreatedAt = DateTime.UtcNow
             });
 
@@ -164,6 +168,7 @@ public class RecurringTransactionDomainModelTests
                 Name = "Coffee",
                 CategoryId = categoryId,
                 Category = context.Categories.Find(categoryId)!,
+                UserId = TestCurrentUserAccessor.DefaultUserId,
                 Amount = 4.50m,
                 TransactionDate = DateTime.UtcNow,
                 RecurringTransactionId = null,

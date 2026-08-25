@@ -13,6 +13,10 @@ namespace FinanceTracker.Infrastructure.Persistence
         public DbSet<Frequency> Frequencies { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
         public DbSet<RecurringTransaction> RecurringTransactions { get; set; }
+        public DbSet<User> Users { get; set; }
+        public DbSet<UserIdentity> UserIdentities { get; set; }
+        public DbSet<UserCredential> UserCredentials { get; set; }
+        public DbSet<UserToken> UserTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

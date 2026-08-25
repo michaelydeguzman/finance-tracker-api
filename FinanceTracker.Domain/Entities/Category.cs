@@ -20,6 +20,10 @@ namespace FinanceTracker.Domain.Entities
         
         [Required]
         public CategoryType CategoryType { get; set; }
+
+        /// <summary>Owning account. Categories are per-user, not shared reference data.</summary>
+        [Required]
+        public required Guid UserId { get; set; }
         
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         

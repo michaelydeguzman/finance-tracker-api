@@ -1,3 +1,4 @@
+using FinanceTracker.API.Authentication;
 using FinanceTracker.Application.Services;
 using FinanceTracker.Application.Features.Categories.Queries.GetCategories;
 using FinanceTracker.Infrastructure.Persistence;
@@ -8,6 +9,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<FinanceTrackerContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("FinanceTrackerDB")));
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserAccessor, HttpContextCurrentUserAccessor>();
 
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();

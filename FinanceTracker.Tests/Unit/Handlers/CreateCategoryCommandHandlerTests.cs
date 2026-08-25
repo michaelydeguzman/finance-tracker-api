@@ -19,13 +19,14 @@ public class CreateCategoryCommandHandlerTests
             .Setup(s => s.AddCategoryAsync(It.IsAny<Category>()))
             .ReturnsAsync((Category c) => c);
 
-        var sut = new CreateCategoryCommandHandler(categoryService.Object);
+        var sut = new CreateCategoryCommandHandler(categoryService.Object, new TestCurrentUserAccessor());
 
         var result = await sut.Handle(new CreateCategoryCommand(dto), CancellationToken.None);
 
         result.Name.Should().Be("Utilities");
         result.CategoryType.Should().Be(CategoryType.Expense);
         categoryService.Verify(s => s.AddCategoryAsync(It.Is<Category>(c =>
-            c.Name == dto.Name && c.CategoryType == dto.CategoryType && c.IsActive)), Times.Once);
+            c.Name == dto.Name && c.CategoryType == dto.CategoryType && c.IsActive
+            && c.UserId == TestCurrentUserAccessor.DefaultUserId)), Times.Once);
     }
 }

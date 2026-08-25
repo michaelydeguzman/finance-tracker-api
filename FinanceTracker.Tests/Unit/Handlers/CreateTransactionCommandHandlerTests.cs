@@ -19,6 +19,7 @@ public class CreateTransactionCommandHandlerTests
             Id = categoryId,
             Name = "Food",
             CategoryType = CategoryType.Expense,
+            UserId = TestCurrentUserAccessor.DefaultUserId,
             CreatedAt = DateTime.UtcNow,
             IsActive = true
         };
@@ -45,6 +46,7 @@ public class CreateTransactionCommandHandlerTests
                 Name = dto.Name,
                 CategoryId = categoryId,
                 Category = category,
+                UserId = TestCurrentUserAccessor.DefaultUserId,
                 Description = dto.Description!,
                 Amount = dto.Amount,
                 TransactionDate = dto.TransactionDate,
@@ -52,7 +54,7 @@ public class CreateTransactionCommandHandlerTests
                 CreatedBy = dto.CreatedBy
             });
 
-        var sut = new CreateTransactionCommandHandler(service.Object);
+        var sut = new CreateTransactionCommandHandler(service.Object, new TestCurrentUserAccessor());
 
         var result = await sut.Handle(new CreateTransactionCommand(dto), CancellationToken.None);
 

@@ -25,7 +25,19 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
                 .IsRequired()
                 .HasDefaultValue(true);
 
-            builder.HasIndex(e => e.CategoryType);
+            // Restrict on every tenancy FK, so deleting a user is an explicit, ordered
+            // purge rather than a cascade that quietly takes financial records with it.
+            builder.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Tenant-leading: every category read is "this user's categories, of this type".
+            builder.HasIndex(e => new { e.UserId, e.CategoryType });
+
+            // A user's category names are unique to them; two users may both have "Rent".
+            builder.HasIndex(e => new { e.UserId, e.Name })
+                .IsUnique();
         }
     }
 }

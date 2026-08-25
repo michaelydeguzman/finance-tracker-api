@@ -1,3 +1,4 @@
+using FinanceTracker.Application.Services;
 using FinanceTracker.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -8,6 +9,10 @@ namespace FinanceTracker.Tests.Integration;
 
 /// <summary>
 /// Hosts the API with EF Core InMemory instead of SQL Server for deterministic integration tests.
+///
+/// Also substitutes a fixed-tenant <see cref="ICurrentUserAccessor"/>, since the real one
+/// reads claims off an authenticated principal that these requests do not carry. Once JWT
+/// bearer auth lands, this can be swapped for a genuine signed test token.
 /// </summary>
 public sealed class FinanceTrackerWebApplicationFactory : WebApplicationFactory<Program>
 {
@@ -24,6 +29,9 @@ public sealed class FinanceTrackerWebApplicationFactory : WebApplicationFactory<
 
             services.AddDbContext<FinanceTrackerContext>(options =>
                 options.UseInMemoryDatabase(_databaseName));
+
+            RemoveServiceDescriptors(services, typeof(ICurrentUserAccessor));
+            services.AddScoped<ICurrentUserAccessor>(_ => new TestCurrentUserAccessor());
         });
     }
 
