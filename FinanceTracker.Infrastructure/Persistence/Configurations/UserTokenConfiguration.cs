@@ -12,7 +12,8 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
 
             builder.Property(e => e.Purpose)
                 .IsRequired()
-                .HasConversion<string>();
+                .HasConversion<string>()
+                .HasMaxLength(32);
 
             builder.Property(e => e.TokenHash)
                 .IsRequired()

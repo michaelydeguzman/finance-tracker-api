@@ -35,8 +35,10 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
             // Tenant-leading: every category read is "this user's categories, of this type".
             builder.HasIndex(e => new { e.UserId, e.CategoryType });
 
-            // A user's category names are unique to them; two users may both have "Rent".
-            builder.HasIndex(e => new { e.UserId, e.Name })
+            // Unique per user *and per type*: "Other" as an income category and "Other" as
+            // an expense category are distinct things, and the app already presents the two
+            // lists separately. Scoping uniqueness to the name alone would reject that.
+            builder.HasIndex(e => new { e.UserId, e.CategoryType, e.Name })
                 .IsUnique();
         }
     }
