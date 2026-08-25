@@ -8,12 +8,14 @@ using FinanceTracker.Application.Features.Categories.Queries.GetCategories;
 using FinanceTracker.Application.Features.Categories.Queries.GetCategoryById;
 using FinanceTracker.Domain.Entities;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinanceTracker.Controllers
 {
     [ApiVersion("1.0")]
     [ApiController]
+    [Authorize]
     [Route("api/v{version:apiVersion}/categories")]
     public class CategoriesV1Controller : ControllerBase
     {

@@ -17,7 +17,7 @@ public class CategoriesApiIntegrationTests : IClassFixture<FinanceTrackerWebAppl
     public CategoriesApiIntegrationTests(FinanceTrackerWebApplicationFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateAuthenticatedClient();
         ResetDatabase();
     }
 

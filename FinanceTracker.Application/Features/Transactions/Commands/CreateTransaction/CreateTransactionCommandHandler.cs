@@ -1,3 +1,4 @@
+using FinanceTracker.Domain.Services;
 using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Services;
 using FinanceTracker.Domain.Entities;
@@ -29,7 +30,7 @@ public sealed class CreateTransactionCommandHandler : IRequestHandler<CreateTran
             Amount = request.Dto.Amount,
             TransactionDate = request.Dto.TransactionDate,
             CreatedAt = DateTime.UtcNow,
-            CreatedBy = request.Dto.CreatedBy
+            CreatedBy = _currentUser.Email ?? _currentUser.RequireUserId().ToString()
         };
 
         var created = await _transactionService.AddTransactionAsync(transaction);

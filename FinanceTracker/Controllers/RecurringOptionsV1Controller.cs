@@ -2,12 +2,14 @@ using Asp.Versioning;
 using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Features.Frequencies.Queries.GetRecurringOptions;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinanceTracker.Controllers
 {
     [ApiVersion("1.0")]
     [ApiController]
+    [Authorize]
     [Route("api/v{version:apiVersion}/recurring-options")]
     public class RecurringOptionsV1Controller : ControllerBase
     {

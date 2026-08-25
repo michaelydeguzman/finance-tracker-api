@@ -1,3 +1,4 @@
+using FinanceTracker.Domain.Services;
 using FinanceTracker.Application.Services;
 
 namespace FinanceTracker.Tests;
@@ -11,9 +12,13 @@ public sealed class TestCurrentUserAccessor : ICurrentUserAccessor
 {
     public static readonly Guid DefaultUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
+    public const string DefaultEmail = "test-user@example.com";
+
     public TestCurrentUserAccessor() => UserId = DefaultUserId;
 
     public TestCurrentUserAccessor(Guid? userId) => UserId = userId;
 
     public Guid? UserId { get; }
+
+    public string? Email => UserId is null ? null : DefaultEmail;
 }

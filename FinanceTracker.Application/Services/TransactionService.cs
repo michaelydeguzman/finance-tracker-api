@@ -1,3 +1,4 @@
+using FinanceTracker.Domain.Services;
 using FinanceTracker.Application.Dtos;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Infrastructure.Persistence;

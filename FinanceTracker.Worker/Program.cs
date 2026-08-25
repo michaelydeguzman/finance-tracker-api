@@ -1,3 +1,4 @@
+using FinanceTracker.Domain.Services;
 using FinanceTracker.Infrastructure.Persistence;
 using FinanceTracker.Worker.Services;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,10 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddDbContext<FinanceTrackerContext>(options =>
             options.UseSqlServer(
                 context.Configuration.GetConnectionString("FinanceTrackerDB")));
+
+        // The worker has no signed-in user. Stated explicitly so the tenancy query filters
+        // resolve to "no tenant" and every cross-tenant read has to opt in by name.
+        services.AddScoped<ICurrentUserAccessor, NoTenantAccessor>();
 
         services.AddScoped<IRecurringTransactionRepository, RecurringTransactionRepository>();
         services.AddScoped<IRunLock, SqlServerRunLock>();

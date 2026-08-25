@@ -1,6 +1,8 @@
+using FinanceTracker.Domain.Services;
 using System.Security.Claims;
 using FinanceTracker.Application.Services;
 using FinanceTracker.Application.Services.Auth;
+using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace FinanceTracker.API.Authentication
 {
@@ -34,6 +36,17 @@ namespace FinanceTracker.API.Authentication
                     ?? principal?.FindFirstValue(ClaimTypes.NameIdentifier);
 
                 return Guid.TryParse(subject, out var userId) ? userId : null;
+            }
+        }
+
+        public string? Email
+        {
+            get
+            {
+                var email = _httpContextAccessor.HttpContext?.User
+                    .FindFirstValue(JwtRegisteredClaimNames.Email);
+
+                return string.IsNullOrWhiteSpace(email) ? null : email;
             }
         }
     }

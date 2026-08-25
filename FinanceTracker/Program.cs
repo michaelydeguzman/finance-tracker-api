@@ -1,3 +1,4 @@
+using FinanceTracker.Domain.Services;
 using System.Text;
 using System.Threading.RateLimiting;
 using FinanceTracker.API.Authentication;
@@ -7,6 +8,7 @@ using FinanceTracker.Application.Services.Auth;
 using FinanceTracker.Application.Services.Email;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using FinanceTracker.Application.Features.Categories.Queries.GetCategories;
 using FinanceTracker.Infrastructure.Persistence;
@@ -51,29 +53,40 @@ switch (emailProvider)
         break;
 }
 
-var jwtSigningKey = builder.Configuration[$"{JwtOptions.SectionName}:{nameof(JwtOptions.SigningKey)}"];
-
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+    .AddJwtBearer();
+
+// Bound through IOptions rather than read from builder.Configuration inline, so the values
+// resolve when the auth handler is first built rather than at startup-script execution.
+// Reading them inline captures whatever configuration existed at that instant and misses
+// any source layered on afterwards — which is exactly how a test host supplies its own key.
+builder.Services
+    .AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtOptions>>((bearer, jwtOptions) =>
     {
+        var jwt = jwtOptions.Value;
+
+        if (string.IsNullOrWhiteSpace(jwt.SigningKey))
+        {
+            throw new InvalidOperationException(
+                "Jwt:SigningKey is not configured. Set it in user-secrets or the environment.");
+        }
+
         // The handler's default inbound mapping rewrites "sub" to a ClaimTypes URI. Turned
         // off so the claim is read under the same name it was issued with — see
         // JwtAccessTokenIssuer.UserIdClaim.
-        options.MapInboundClaims = false;
+        bearer.MapInboundClaims = false;
 
-        options.TokenValidationParameters = new TokenValidationParameters
+        bearer.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration[$"{JwtOptions.SectionName}:{nameof(JwtOptions.Issuer)}"],
-            ValidAudience = builder.Configuration[$"{JwtOptions.SectionName}:{nameof(JwtOptions.Audience)}"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(string.IsNullOrWhiteSpace(jwtSigningKey)
-                    ? Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N")
-                    : jwtSigningKey)),
+            ValidIssuer = jwt.Issuer,
+            ValidAudience = jwt.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
 
             // No grace period on expiry. The default five minutes would silently extend
             // every access token's life well past the window it was issued for.

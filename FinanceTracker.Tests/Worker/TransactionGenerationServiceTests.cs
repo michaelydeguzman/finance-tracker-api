@@ -12,10 +12,13 @@ public class TransactionGenerationServiceTests
 {
     private static FinanceTrackerContext CreateInMemoryContext()
     {
+        // Bound to the tenant the test templates belong to. The real worker runs with no
+        // tenant and reaches across them with IgnoreQueryFilters; here the same context is
+        // used to assert on what it generated, which needs to see those rows.
         var options = new DbContextOptionsBuilder<FinanceTrackerContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
-        return new FinanceTrackerContext(options);
+        return new FinanceTrackerContext(options, new TestCurrentUserAccessor());
     }
 
     private static RecurringTransaction CreateTemplate(

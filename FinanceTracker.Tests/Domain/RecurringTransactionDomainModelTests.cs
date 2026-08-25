@@ -77,7 +77,7 @@ public class RecurringTransactionDomainModelTests
         var frequencyId = Guid.Parse("00000000-0000-0000-0000-000000000004");
         var entityId = Guid.NewGuid();
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = new FinanceTrackerContext(options, new TestCurrentUserAccessor()))
         {
             context.Categories.Add(new Category
             {
@@ -100,7 +100,7 @@ public class RecurringTransactionDomainModelTests
             await context.SaveChangesAsync();
         }
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = new FinanceTrackerContext(options, new TestCurrentUserAccessor()))
         {
             var entity = new RecurringTransaction
             {
@@ -123,7 +123,7 @@ public class RecurringTransactionDomainModelTests
             await context.SaveChangesAsync();
         }
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = new FinanceTrackerContext(options, new TestCurrentUserAccessor()))
         {
             var retrieved = await context.RecurringTransactions.FindAsync(entityId);
 
@@ -146,7 +146,7 @@ public class RecurringTransactionDomainModelTests
         var categoryId = Guid.NewGuid();
         var transactionId = Guid.NewGuid();
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = new FinanceTrackerContext(options, new TestCurrentUserAccessor()))
         {
             context.Categories.Add(new Category
             {
@@ -160,7 +160,7 @@ public class RecurringTransactionDomainModelTests
             await context.SaveChangesAsync();
         }
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = new FinanceTrackerContext(options, new TestCurrentUserAccessor()))
         {
             var transaction = new Transaction
             {
@@ -180,7 +180,7 @@ public class RecurringTransactionDomainModelTests
             await context.SaveChangesAsync();
         }
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = new FinanceTrackerContext(options, new TestCurrentUserAccessor()))
         {
             var retrieved = await context.Transactions.FindAsync(transactionId);
 

@@ -17,7 +17,7 @@ public class TransactionsApiIntegrationTests : IClassFixture<FinanceTrackerWebAp
     public TransactionsApiIntegrationTests(FinanceTrackerWebApplicationFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateAuthenticatedClient();
         ResetDatabase();
     }
 
@@ -40,8 +40,7 @@ public class TransactionsApiIntegrationTests : IClassFixture<FinanceTrackerWebAp
             CategoryId = categoryId,
             Description = "Dairy",
             Amount = 4.99m,
-            TransactionDate = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-            CreatedBy = "integration-test"
+            TransactionDate = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
         };
 
         var postResponse = await _client.PostAsJsonAsync("/api/v1/transactions", createDto, HttpJsonOptions.ForApi);
@@ -218,8 +217,7 @@ public class TransactionsApiIntegrationTests : IClassFixture<FinanceTrackerWebAp
             Name = name,
             CategoryId = categoryId,
             Amount = 1m,
-            TransactionDate = transactionDate,
-            CreatedBy = "integration-test"
+            TransactionDate = transactionDate
         };
         var postResponse = await _client.PostAsJsonAsync("/api/v1/transactions", dto, HttpJsonOptions.ForApi);
         postResponse.StatusCode.Should().Be(HttpStatusCode.Created);

@@ -1,13 +1,14 @@
-namespace FinanceTracker.Application.Services;
+namespace FinanceTracker.Domain.Services;
 
 /// <summary>
 /// The tenant the current operation belongs to.
 ///
-/// Introduced with the tenancy columns because <c>UserId</c> is <c>required</c> on every
-/// financial entity: the compiler now refuses any write that does not name an owner, and
-/// this is where that owner comes from. Phase 2 backs it with JWT claims; until then the
-/// API implementation resolves nothing and writes fail closed rather than creating
-/// unowned rows.
+/// Lives in Domain because both Application and Infrastructure need it and Domain depends
+/// on nothing: the handlers read it to stamp an owner on new records, and the DbContext
+/// reads it to scope every query.
+///
+/// <c>UserId</c> is <c>required</c> on every financial entity, so the compiler refuses any
+/// write that does not name an owner, and this is where that owner comes from.
 /// </summary>
 public interface ICurrentUserAccessor
 {
@@ -24,4 +25,10 @@ public interface ICurrentUserAccessor
     /// </summary>
     Guid RequireUserId() => UserId ?? throw new InvalidOperationException(
         "No authenticated user is in scope for this operation.");
+
+    /// <summary>
+    /// The signed-in user's email, taken from the token rather than the database so that
+    /// stamping an audit label costs no round trip. Null when there is no user context.
+    /// </summary>
+    string? Email => null;
 }

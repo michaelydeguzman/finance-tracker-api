@@ -24,6 +24,14 @@ public class TenancyModelTests
             .UseInMemoryDatabase($"{prefix}_{Guid.NewGuid()}")
             .Options;
 
+    /// <summary>
+    /// Cross-tenant setup and assertions run outside the filter on purpose — these tests
+    /// exist to check the data model, and the filter itself is covered by
+    /// <see cref="QueryFilterProbeTests"/>.
+    /// </summary>
+    private static FinanceTrackerContext CrossTenantContext(DbContextOptions<FinanceTrackerContext> options) =>
+        new(options, new TestCurrentUserAccessor(null));
+
     private static Category CategoryFor(Guid userId, string name) => new()
     {
         Id = Guid.NewGuid(),
@@ -40,7 +48,7 @@ public class TenancyModelTests
         var categoryA = CategoryFor(UserA, "Groceries");
         var categoryB = CategoryFor(UserB, "Groceries");
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = CrossTenantContext(options))
         {
             context.Categories.AddRange(categoryA, categoryB);
             context.Transactions.AddRange(
@@ -68,9 +76,9 @@ public class TenancyModelTests
             await context.SaveChangesAsync();
         }
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = CrossTenantContext(options))
         {
-            var forA = await context.Transactions.Where(t => t.UserId == UserA).ToListAsync();
+            var forA = await context.Transactions.IgnoreQueryFilters().Where(t => t.UserId == UserA).ToListAsync();
 
             forA.Should().ContainSingle();
             forA[0].Name.Should().Be("A's shop");
@@ -84,15 +92,15 @@ public class TenancyModelTests
         // scoped to (UserId, Name), never to Name alone.
         var options = NewOptions("SharedNames");
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = CrossTenantContext(options))
         {
             context.Categories.AddRange(CategoryFor(UserA, "Groceries"), CategoryFor(UserB, "Groceries"));
             await context.SaveChangesAsync();
         }
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = CrossTenantContext(options))
         {
-            var named = await context.Categories.Where(c => c.Name == "Groceries").ToListAsync();
+            var named = await context.Categories.IgnoreQueryFilters().Where(c => c.Name == "Groceries").ToListAsync();
 
             named.Should().HaveCount(2);
             named.Select(c => c.UserId).Should().BeEquivalentTo(new[] { UserA, UserB });
@@ -123,7 +131,7 @@ public class TenancyModelTests
             Status = RecurringTransactionStatus.Active
         };
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = CrossTenantContext(options))
         {
             context.Categories.Add(category);
             context.Frequencies.Add(frequency);
@@ -131,9 +139,9 @@ public class TenancyModelTests
             await context.SaveChangesAsync();
         }
 
-        using (var context = new FinanceTrackerContext(options))
+        using (var context = CrossTenantContext(options))
         {
-            var loaded = await context.RecurringTransactions.SingleAsync(r => r.Id == template.Id);
+            var loaded = await context.RecurringTransactions.IgnoreQueryFilters().SingleAsync(r => r.Id == template.Id);
 
             loaded.UserId.Should().Be(UserA);
         }
