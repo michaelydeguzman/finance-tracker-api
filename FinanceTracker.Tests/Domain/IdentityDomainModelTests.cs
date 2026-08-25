@@ -47,14 +47,17 @@ public class IdentityDomainModelTests
     }
 
     [Fact]
-    public void UserTokenPurpose_CoversAllThreeEmailedFlows()
+    public void UserTokenPurpose_CoversTheEmailedFlowsAndRefresh()
     {
+        // Purpose is part of the lookup when a token is redeemed, so each value here is a
+        // separate namespace: a token minted for one flow is inert in every other.
         Enum.GetValues<UserTokenPurpose>().Should().BeEquivalentTo(
             new[]
             {
                 UserTokenPurpose.EmailVerification,
                 UserTokenPurpose.PasswordReset,
-                UserTokenPurpose.MagicLink
+                UserTokenPurpose.MagicLink,
+                UserTokenPurpose.RefreshToken
             });
     }
 

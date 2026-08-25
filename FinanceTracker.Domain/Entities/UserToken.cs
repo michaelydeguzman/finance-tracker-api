@@ -6,7 +6,14 @@ namespace FinanceTracker.Domain.Entities
     {
         EmailVerification,
         PasswordReset,
-        MagicLink
+        MagicLink,
+
+        /// <summary>
+        /// Exchanged for a fresh access token. Stored like the emailed purposes because it
+        /// needs the same single-use, expiring, hash-at-rest treatment — but it is never
+        /// emailed; it is handed straight back to the caller that signed in.
+        /// </summary>
+        RefreshToken
     }
 
     /// <summary>

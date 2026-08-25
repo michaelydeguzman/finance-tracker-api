@@ -1,16 +1,19 @@
 using System.Security.Claims;
 using FinanceTracker.Application.Services;
+using FinanceTracker.Application.Services.Auth;
 
 namespace FinanceTracker.API.Authentication
 {
     /// <summary>
     /// Resolves the tenant from the caller's authenticated principal.
     ///
-    /// Phase 2 adds JWT bearer authentication and the <c>sub</c> claim this reads. Until
-    /// then no principal carries it, so <see cref="UserId"/> is null and every
-    /// tenancy-scoped write fails loudly via <c>RequireUserId()</c> — the intended
-    /// fail-closed behaviour while the auth stack is being built out. Reads are
-    /// unaffected until the query filters land in Phase 3.
+    /// Reads the <c>sub</c> claim minted by <see cref="JwtAccessTokenIssuer"/>. Inbound
+    /// claim mapping is switched off in the bearer setup, so the name on the wire is the
+    /// name read here; the ClaimTypes fallback covers any principal that did go through
+    /// the default mapping.
+    ///
+    /// An unauthenticated request yields null, and every tenancy-scoped write then fails
+    /// loudly via <c>RequireUserId()</c> rather than producing an unowned row.
     /// </summary>
     public sealed class HttpContextCurrentUserAccessor : ICurrentUserAccessor
     {
@@ -25,8 +28,10 @@ namespace FinanceTracker.API.Authentication
         {
             get
             {
-                var subject = _httpContextAccessor.HttpContext?.User
-                    .FindFirstValue(ClaimTypes.NameIdentifier);
+                var principal = _httpContextAccessor.HttpContext?.User;
+
+                var subject = principal?.FindFirstValue(JwtAccessTokenIssuer.UserIdClaim)
+                    ?? principal?.FindFirstValue(ClaimTypes.NameIdentifier);
 
                 return Guid.TryParse(subject, out var userId) ? userId : null;
             }
