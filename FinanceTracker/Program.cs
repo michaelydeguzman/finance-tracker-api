@@ -119,6 +119,7 @@ builder.Services.AddScoped<IFrequencyRepository, FrequencyRepository>();
 builder.Services.AddScoped<IFrequencyService, FrequencyService>();
 builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
 builder.Services.AddScoped<ITransactionService, TransactionService>();
+builder.Services.AddScoped<IRecurringTransactionRepository, RecurringTransactionRepository>();
 
 // Add services to the container.
 
