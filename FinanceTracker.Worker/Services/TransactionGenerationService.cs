@@ -1,8 +1,6 @@
-using System.Data;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Domain.Services;
 using FinanceTracker.Infrastructure.Persistence;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -10,8 +8,6 @@ namespace FinanceTracker.Worker.Services;
 
 public class TransactionGenerationService
 {
-    private const string RunLockResource = "FinanceTracker:TransactionGenerationService:Run";
-
     // Safety valve for templates that have gone unprocessed for a very long time
     // (e.g. worker down for months, or a short Custom interval never run). Without a cap,
     // a single template could stage an unbounded number of tracked entities before the
@@ -20,28 +16,28 @@ public class TransactionGenerationService
 
     private readonly FinanceTrackerContext _context;
     private readonly IRecurringTransactionRepository _recurringRepo;
+    private readonly IRunLock _runLock;
     private readonly ILogger<TransactionGenerationService> _logger;
 
     public TransactionGenerationService(
         FinanceTrackerContext context,
         IRecurringTransactionRepository recurringRepo,
+        IRunLock runLock,
         ILogger<TransactionGenerationService> logger)
     {
         _context = context;
         _recurringRepo = recurringRepo;
+        _runLock = runLock;
         _logger = logger;
     }
 
     public async Task RunAsync()
     {
-        var connection = _context.Database.GetDbConnection();
-        await connection.OpenAsync();
-
         // Guards against overlapping worker runs (e.g. a scheduled invocation firing while a
         // previous slow run is still in progress) generating duplicate transactions for the
-        // same overdue template. Session-scoped so it's held for the whole run, independent of
-        // the per-template SaveChangesAsync calls below.
-        if (!await TryAcquireRunLockAsync(connection))
+        // same overdue template. Held for the whole run, independent of the per-template
+        // SaveChangesAsync calls below.
+        if (!await _runLock.TryAcquireAsync())
         {
             _logger.LogWarning("Another {Service} run is already in progress; skipping this run.", nameof(TransactionGenerationService));
             return;
@@ -83,36 +79,8 @@ public class TransactionGenerationService
         }
         finally
         {
-            await ReleaseRunLockAsync(connection);
+            await _runLock.ReleaseAsync();
         }
-    }
-
-    private static async Task<bool> TryAcquireRunLockAsync(IDbConnection connection)
-    {
-        using var command = connection.CreateCommand();
-        command.CommandText = "sp_getapplock";
-        command.CommandType = CommandType.StoredProcedure;
-        command.Parameters.Add(new SqlParameter("@Resource", RunLockResource));
-        command.Parameters.Add(new SqlParameter("@LockMode", "Exclusive"));
-        command.Parameters.Add(new SqlParameter("@LockOwner", "Session"));
-        command.Parameters.Add(new SqlParameter("@LockTimeout", 0));
-        var returnValue = new SqlParameter { Direction = ParameterDirection.ReturnValue };
-        command.Parameters.Add(returnValue);
-
-        await ((SqlCommand)command).ExecuteNonQueryAsync();
-
-        return (int)returnValue.Value! >= 0;
-    }
-
-    private static async Task ReleaseRunLockAsync(IDbConnection connection)
-    {
-        using var command = connection.CreateCommand();
-        command.CommandText = "sp_releaseapplock";
-        command.CommandType = CommandType.StoredProcedure;
-        command.Parameters.Add(new SqlParameter("@Resource", RunLockResource));
-        command.Parameters.Add(new SqlParameter("@LockOwner", "Session"));
-
-        await ((SqlCommand)command).ExecuteNonQueryAsync();
     }
 
     private async Task GenerateForTemplateAsync(RecurringTransaction template, DateTime now)
@@ -142,6 +110,7 @@ public class TransactionGenerationService
                 Name = template.Name,                           // D-08
                 CategoryId = template.CategoryId,               // D-10 (FK only)
                 Category = null!,                               // nav property not set — EF Core does not validate at Add() time
+                UserId = template.UserId,                       // tenancy: generated rows inherit the template's owner
                 Amount = template.DefaultAmount,                 // D-09
                 TransactionDate = template.NextOccurrenceDate,  // D-07: scheduled date, not wall-clock run time
                 RecurringTransactionId = template.Id,           // D-11

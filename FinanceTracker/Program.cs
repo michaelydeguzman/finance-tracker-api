@@ -1,4 +1,15 @@
+using FinanceTracker.Domain.Services;
+using System.Text;
+using System.Threading.RateLimiting;
+using FinanceTracker.API.Authentication;
+using FinanceTracker.Application.Options;
 using FinanceTracker.Application.Services;
+using FinanceTracker.Application.Services.Auth;
+using FinanceTracker.Application.Services.Email;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using FinanceTracker.Application.Features.Categories.Queries.GetCategories;
 using FinanceTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +19,99 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<FinanceTrackerContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("FinanceTrackerDB")));
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserAccessor, HttpContextCurrentUserAccessor>();
+
+// --- Auth configuration -----------------------------------------------------------
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
+builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
+
+builder.Services.AddSingleton<IPasswordHashingService, PasswordHashingService>();
+builder.Services.AddSingleton<ISecretTokenService, SecretTokenService>();
+builder.Services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+
+// Provider is chosen by configuration so the vendor stays a config line, not a rewrite.
+// Logging is the default, so an unconfigured environment cannot mail real people.
+var emailProvider = builder.Configuration
+    .GetSection(EmailOptions.SectionName)
+    .GetValue<EmailProvider>(nameof(EmailOptions.Provider));
+
+switch (emailProvider)
+{
+    case EmailProvider.Smtp:
+        builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+        break;
+    case EmailProvider.Resend:
+        builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
+        break;
+    default:
+        builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+        break;
+}
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer();
+
+// Bound through IOptions rather than read from builder.Configuration inline, so the values
+// resolve when the auth handler is first built rather than at startup-script execution.
+// Reading them inline captures whatever configuration existed at that instant and misses
+// any source layered on afterwards — which is exactly how a test host supplies its own key.
+builder.Services
+    .AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtOptions>>((bearer, jwtOptions) =>
+    {
+        var jwt = jwtOptions.Value;
+
+        if (string.IsNullOrWhiteSpace(jwt.SigningKey))
+        {
+            throw new InvalidOperationException(
+                "Jwt:SigningKey is not configured. Set it in user-secrets or the environment.");
+        }
+
+        // The handler's default inbound mapping rewrites "sub" to a ClaimTypes URI. Turned
+        // off so the claim is read under the same name it was issued with — see
+        // JwtAccessTokenIssuer.UserIdClaim.
+        bearer.MapInboundClaims = false;
+
+        bearer.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwt.Issuer,
+            ValidAudience = jwt.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
+
+            // No grace period on expiry. The default five minutes would silently extend
+            // every access token's life well past the window it was issued for.
+            ClockSkew = TimeSpan.Zero,
+            NameClaimType = JwtAccessTokenIssuer.UserIdClaim
+        };
+    });
+
+builder.Services.AddAuthorization();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy(RateLimitPolicies.Auth, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+});
+// ----------------------------------------------------------------------------------
 
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
@@ -58,6 +162,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseRateLimiter();
+
+// Authentication must run before authorization — without it the pipeline authorizes an
+// anonymous principal and every [Authorize] check has nothing to check.
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

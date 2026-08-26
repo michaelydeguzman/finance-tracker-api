@@ -12,10 +12,13 @@ public class TransactionGenerationServiceTests
 {
     private static FinanceTrackerContext CreateInMemoryContext()
     {
+        // Bound to the tenant the test templates belong to. The real worker runs with no
+        // tenant and reaches across them with IgnoreQueryFilters; here the same context is
+        // used to assert on what it generated, which needs to see those rows.
         var options = new DbContextOptionsBuilder<FinanceTrackerContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
-        return new FinanceTrackerContext(options);
+        return new FinanceTrackerContext(options, new TestCurrentUserAccessor());
     }
 
     private static RecurringTransaction CreateTemplate(
@@ -36,7 +39,8 @@ public class TransactionGenerationServiceTests
             Name = name,
             DefaultAmount = defaultAmount,
             CategoryId = categoryId,
-            Category = new Category { Id = categoryId, Name = "Test Category", CategoryType = CategoryType.Expense },
+            Category = new Category { Id = categoryId, Name = "Test Category", CategoryType = CategoryType.Expense, UserId = TestCurrentUserAccessor.DefaultUserId },
+            UserId = TestCurrentUserAccessor.DefaultUserId,
             FrequencyId = frequencyId,
             Frequency = new Frequency { Id = frequencyId, Name = frequencyType.ToString(), Type = frequencyType },
             StartDate = nextOccurrenceDate.AddMonths(-1),
@@ -49,10 +53,11 @@ public class TransactionGenerationServiceTests
 
     private static TransactionGenerationService CreateService(
         FinanceTrackerContext context,
-        IRecurringTransactionRepository repo)
+        IRecurringTransactionRepository repo,
+        IRunLock? runLock = null)
     {
         var logger = new Mock<ILogger<TransactionGenerationService>>().Object;
-        return new TransactionGenerationService(context, repo, logger);
+        return new TransactionGenerationService(context, repo, runLock ?? new FakeRunLock(), logger);
     }
 
     // --- Test 1 ---
@@ -257,7 +262,8 @@ public class TransactionGenerationServiceTests
             Name = "Bad Template",
             DefaultAmount = 50m,
             CategoryId = Guid.NewGuid(),
-            Category = new Category { Id = Guid.NewGuid(), Name = "Test", CategoryType = CategoryType.Expense },
+            Category = new Category { Id = Guid.NewGuid(), Name = "Test", CategoryType = CategoryType.Expense, UserId = TestCurrentUserAccessor.DefaultUserId },
+            UserId = TestCurrentUserAccessor.DefaultUserId,
             FrequencyId = Guid.NewGuid(),
             Frequency = null!, // intentionally null to force NullReferenceException — tests D-15
             StartDate = DateTime.UtcNow.AddMonths(-1),
@@ -278,5 +284,76 @@ public class TransactionGenerationServiceTests
         var transactions = context.Transactions.ToList();
         transactions.Should().HaveCount(1);                                     // D-15 — good template processed
         transactions[0].RecurringTransactionId.Should().Be(goodTemplate.Id);    // D-15 — correct template
+    }
+
+    // --- Run lock ---
+    [Fact]
+    public async Task RunAsync_WhenLockHeldByAnotherRun_GeneratesNothing()
+    {
+        using var context = CreateInMemoryContext();
+        var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1).AddMinutes(5));
+
+        var mockRepo = new Mock<IRecurringTransactionRepository>();
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+            .ReturnsAsync(new List<RecurringTransaction> { template });
+
+        var runLock = new FakeRunLock(canAcquire: false);
+        var service = CreateService(context, mockRepo.Object, runLock);
+
+        await service.RunAsync();
+
+        context.Transactions.Should().BeEmpty("a concurrent run already holds the lock");
+        mockRepo.Verify(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()), Times.Never,
+            "the run should bail out before querying for work");
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenLockNotAcquired_DoesNotReleaseIt()
+    {
+        // Releasing an applock this session does not own raises an error in SQL Server,
+        // so the skip path must not touch it.
+        using var context = CreateInMemoryContext();
+
+        var mockRepo = new Mock<IRecurringTransactionRepository>();
+        var runLock = new FakeRunLock(canAcquire: false);
+
+        await CreateService(context, mockRepo.Object, runLock).RunAsync();
+
+        runLock.Released.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_ReleasesLockAfterSuccessfulRun()
+    {
+        using var context = CreateInMemoryContext();
+        var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1).AddMinutes(5));
+
+        var mockRepo = new Mock<IRecurringTransactionRepository>();
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+            .ReturnsAsync(new List<RecurringTransaction> { template });
+
+        var runLock = new FakeRunLock();
+        await CreateService(context, mockRepo.Object, runLock).RunAsync();
+
+        runLock.Released.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunAsync_ReleasesLockEvenWhenTheRunThrows()
+    {
+        // A lock left held by a crashed run would block every subsequent run indefinitely.
+        using var context = CreateInMemoryContext();
+
+        var mockRepo = new Mock<IRecurringTransactionRepository>();
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+            .ThrowsAsync(new InvalidOperationException("repository unavailable"));
+
+        var runLock = new FakeRunLock();
+        var service = CreateService(context, mockRepo.Object, runLock);
+
+        await service.Invoking(x => x.RunAsync())
+            .Should().ThrowAsync<InvalidOperationException>();
+
+        runLock.Released.Should().BeTrue();
     }
 }

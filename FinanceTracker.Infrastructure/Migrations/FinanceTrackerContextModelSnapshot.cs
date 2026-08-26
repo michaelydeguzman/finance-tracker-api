@@ -45,9 +45,15 @@ namespace FinanceTracker.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("CategoryType");
+                    b.HasIndex("UserId", "CategoryType");
+
+                    b.HasIndex("UserId", "CategoryType", "Name")
+                        .IsUnique();
 
                     b.ToTable("Categories");
                 });
@@ -206,13 +212,18 @@ namespace FinanceTracker.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
 
                     b.HasIndex("FrequencyId");
 
-                    b.HasIndex("Status");
+                    b.HasIndex("Status", "NextOccurrenceDate");
+
+                    b.HasIndex("UserId", "Status");
 
                     b.ToTable("RecurringTransactions");
                 });
@@ -253,17 +264,159 @@ namespace FinanceTracker.Infrastructure.Migrations
                     b.Property<DateTime>("TransactionDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
 
-                    b.HasIndex("CreatedAt");
-
                     b.HasIndex("RecurringTransactionId");
 
-                    b.HasIndex("TransactionDate");
+                    b.HasIndex("UserId", "CategoryId");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.HasIndex("UserId", "TransactionDate");
 
                     b.ToTable("Transactions");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.User", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTime?>("EmailVerifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.UserCredential", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserCredentials");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.UserIdentity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("ProviderSubject")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Provider", "ProviderSubject")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "Provider")
+                        .IsUnique();
+
+                    b.ToTable("UserIdentities");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.UserToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "Purpose");
+
+                    b.ToTable("UserTokens");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.Category", b =>
+                {
+                    b.HasOne("FinanceTracker.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("FinanceTracker.Domain.Entities.RecurringTransaction", b =>
@@ -277,6 +430,12 @@ namespace FinanceTracker.Infrastructure.Migrations
                     b.HasOne("FinanceTracker.Domain.Entities.Frequency", "Frequency")
                         .WithMany("RecurringTransactions")
                         .HasForeignKey("FrequencyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FinanceTracker.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -298,9 +457,48 @@ namespace FinanceTracker.Infrastructure.Migrations
                         .HasForeignKey("RecurringTransactionId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("FinanceTracker.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Category");
 
                     b.Navigation("RecurringTransaction");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.UserCredential", b =>
+                {
+                    b.HasOne("FinanceTracker.Domain.Entities.User", "User")
+                        .WithOne("Credential")
+                        .HasForeignKey("FinanceTracker.Domain.Entities.UserCredential", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.UserIdentity", b =>
+                {
+                    b.HasOne("FinanceTracker.Domain.Entities.User", "User")
+                        .WithMany("Identities")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.UserToken", b =>
+                {
+                    b.HasOne("FinanceTracker.Domain.Entities.User", "User")
+                        .WithMany("Tokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("FinanceTracker.Domain.Entities.Category", b =>
@@ -318,6 +516,15 @@ namespace FinanceTracker.Infrastructure.Migrations
             modelBuilder.Entity("FinanceTracker.Domain.Entities.RecurringTransaction", b =>
                 {
                     b.Navigation("Transactions");
+                });
+
+            modelBuilder.Entity("FinanceTracker.Domain.Entities.User", b =>
+                {
+                    b.Navigation("Credential");
+
+                    b.Navigation("Identities");
+
+                    b.Navigation("Tokens");
                 });
 #pragma warning restore 612, 618
         }

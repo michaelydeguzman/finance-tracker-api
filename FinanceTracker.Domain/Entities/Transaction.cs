@@ -15,6 +15,10 @@ namespace FinanceTracker.Domain.Entities
         public required Guid CategoryId { get; set; }
         public required Category Category { get; set; }
 
+        /// <summary>Owning account. Every tenancy-scoped query filters on this.</summary>
+        [Required]
+        public required Guid UserId { get; set; }
+
         [MaxLength(500)]
         public string Description { get; set; } = string.Empty;
 

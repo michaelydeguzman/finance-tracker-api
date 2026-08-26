@@ -7,12 +7,14 @@ using FinanceTracker.Application.Features.Transactions.Commands.UpdateTransactio
 using FinanceTracker.Application.Features.Transactions.Queries.GetTransactionsList;
 using FinanceTracker.Domain.Entities;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinanceTracker.Controllers;
 
 [ApiVersion("1.0")]
 [ApiController]
+[Authorize]
 [Route("api/v{version:apiVersion}/transactions")]
 public class TransactionsV1Controller : ControllerBase
 {

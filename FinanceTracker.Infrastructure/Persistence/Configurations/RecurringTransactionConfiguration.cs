@@ -49,9 +49,19 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
                 .HasForeignKey(t => t.RecurringTransactionId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            builder.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasIndex(e => new { e.UserId, e.Status });
             builder.HasIndex(e => e.CategoryId);
             builder.HasIndex(e => e.FrequencyId);
-            builder.HasIndex(e => e.Status);
+
+            // The worker's sweep is cross-tenant and filters on Status + NextOccurrenceDate
+            // with no UserId predicate, so it needs its own index that does not lead on the
+            // tenant column.
+            builder.HasIndex(e => new { e.Status, e.NextOccurrenceDate });
         }
     }
 }

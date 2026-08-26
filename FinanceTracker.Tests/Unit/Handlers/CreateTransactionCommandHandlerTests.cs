@@ -19,6 +19,7 @@ public class CreateTransactionCommandHandlerTests
             Id = categoryId,
             Name = "Food",
             CategoryType = CategoryType.Expense,
+            UserId = TestCurrentUserAccessor.DefaultUserId,
             CreatedAt = DateTime.UtcNow,
             IsActive = true
         };
@@ -29,8 +30,7 @@ public class CreateTransactionCommandHandlerTests
             CategoryId = categoryId,
             Description = "Morning",
             Amount = 3.50m,
-            TransactionDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc),
-            CreatedBy = "unit-test"
+            TransactionDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc)
         };
 
         var service = new Mock<ITransactionService>(MockBehavior.Strict);
@@ -45,14 +45,15 @@ public class CreateTransactionCommandHandlerTests
                 Name = dto.Name,
                 CategoryId = categoryId,
                 Category = category,
+                UserId = TestCurrentUserAccessor.DefaultUserId,
                 Description = dto.Description!,
                 Amount = dto.Amount,
                 TransactionDate = dto.TransactionDate,
                 CreatedAt = DateTime.UtcNow,
-                CreatedBy = dto.CreatedBy
+                CreatedBy = TestCurrentUserAccessor.DefaultEmail
             });
 
-        var sut = new CreateTransactionCommandHandler(service.Object);
+        var sut = new CreateTransactionCommandHandler(service.Object, new TestCurrentUserAccessor());
 
         var result = await sut.Handle(new CreateTransactionCommand(dto), CancellationToken.None);
 
@@ -61,7 +62,7 @@ public class CreateTransactionCommandHandlerTests
         result.CategoryName.Should().Be("Food");
         result.CategoryType.Should().Be(CategoryType.Expense.ToString());
         service.Verify(s => s.AddTransactionAsync(It.Is<Transaction>(t =>
-            t.Name == dto.Name && t.CategoryId == categoryId && t.CreatedBy == "unit-test")), Times.Once);
+            t.Name == dto.Name && t.CategoryId == categoryId && t.CreatedBy == TestCurrentUserAccessor.DefaultEmail)), Times.Once);
         service.Verify(s => s.GetByIdAsync(It.IsAny<Guid>()), Times.Once);
     }
 }

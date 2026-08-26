@@ -55,13 +55,19 @@ public class RecurrenceCalculatorTests
         result.Should().Be(new DateTime(2024, 3, 29, 0, 0, 0, DateTimeKind.Utc));
     }
 
-    [Fact]
-    public void NextOccurrence_Custom_NullIntervalDays_ThrowsArgumentException()
+    [Theory]
+    [InlineData(null)]   // never configured
+    [InlineData(0)]      // would never advance, looping forever
+    [InlineData(-7)]     // would walk backwards, regenerating the past
+    public void NextOccurrence_Custom_NonPositiveIntervalDays_ThrowsArgumentException(int? intervalDays)
     {
         var start   = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc);
         var current = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc);
-        var act = () => RecurrenceCalculator.NextOccurrence(FrequencyType.Custom, null, current, start);
+
+        var act = () => RecurrenceCalculator.NextOccurrence(FrequencyType.Custom, intervalDays, current, start);
+
         act.Should().Throw<ArgumentException>()
-           .WithMessage("*IntervalDays must be set for Custom frequency*");
+           .WithMessage("*IntervalDays must be a positive number of days for Custom frequency*")
+           .And.ParamName.Should().Be("intervalDays");
     }
 }

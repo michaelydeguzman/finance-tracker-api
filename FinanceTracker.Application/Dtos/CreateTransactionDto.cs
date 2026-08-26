@@ -20,7 +20,7 @@ public sealed class CreateTransactionDto
     [Required]
     public DateTime TransactionDate { get; set; }
 
-    [Required]
-    [MaxLength(100)]
-    public string CreatedBy { get; set; } = string.Empty;
+    // CreatedBy is deliberately absent. It used to arrive in the request body, defaulting
+    // to a literal the browser chose, which made the audit label anything the caller cared
+    // to claim. It is now taken from the authenticated principal instead.
 }

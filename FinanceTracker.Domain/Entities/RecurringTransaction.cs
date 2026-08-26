@@ -27,6 +27,13 @@ namespace FinanceTracker.Domain.Entities
         public required Guid CategoryId { get; set; }
         public required Category Category { get; set; }
 
+        /// <summary>
+        /// Owning account, copied onto every <see cref="Transaction"/> this template
+        /// generates so worker-created rows land in the right tenant.
+        /// </summary>
+        [Required]
+        public required Guid UserId { get; set; }
+
         [Required]
         public required Guid FrequencyId { get; set; }
         public required Frequency Frequency { get; set; }
