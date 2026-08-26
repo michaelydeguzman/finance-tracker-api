@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using FinanceTracker.Domain.Entities;
 
 namespace FinanceTracker.Application.Dtos.Auth;
@@ -22,6 +23,14 @@ public sealed class LoginRequestDto
 /// </summary>
 public sealed class ExternalLoginRequestDto
 {
+    /// <summary>
+    /// Accepted by name as well as by number, because the front end sends "Google".
+    ///
+    /// Scoped to this property rather than registered globally: a global converter also
+    /// changes how enums are *written*, and CategoryType would start coming back as
+    /// "Expense" instead of 1 — which the existing front end reads as a numeric enum.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public IdentityProvider Provider { get; set; }
     public string ProviderSubject { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
