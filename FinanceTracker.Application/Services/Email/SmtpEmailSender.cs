@@ -41,7 +41,11 @@ public sealed class SmtpEmailSender : IEmailSender
 
         if (!string.IsNullOrWhiteSpace(_options.Smtp.Username))
         {
-            await client.AuthenticateAsync(_options.Smtp.Username, _options.Smtp.Password, cancellationToken);
+            // Password is optional in configuration; an empty string is what MailKit expects
+            // for a username-only login, and passing the nullable through was the build's one
+            // outstanding warning.
+            await client.AuthenticateAsync(
+                _options.Smtp.Username, _options.Smtp.Password ?? string.Empty, cancellationToken);
         }
 
         await client.SendAsync(mime, cancellationToken);
