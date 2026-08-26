@@ -24,6 +24,11 @@ namespace FinanceTracker.Infrastructure.Persistence
             return await _context.Transactions
                 .AsNoTracking()
                 .Include(x => x.Category)
+                // The generating template carries the frequency the UI labels the row with.
+                // Without this the "Recurrence" detail row is blank on every generated
+                // transaction, because the navigation is simply never loaded.
+                .Include(x => x.RecurringTransaction!)
+                    .ThenInclude(r => r.Frequency)
                 .FirstOrDefaultAsync(x => x.Id == id);
         }
 
@@ -31,7 +36,9 @@ namespace FinanceTracker.Infrastructure.Persistence
         {
             return _context.Transactions
                 .AsNoTracking()
-                .Include(x => x.Category);
+                .Include(x => x.Category)
+                .Include(x => x.RecurringTransaction!)
+                    .ThenInclude(r => r.Frequency);
         }
 
         public async Task<List<Transaction>> GetAllAsync()
