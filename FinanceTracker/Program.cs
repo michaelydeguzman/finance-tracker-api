@@ -40,18 +40,29 @@ var emailProvider = builder.Configuration
     .GetSection(EmailOptions.SectionName)
     .GetValue<EmailProvider>(nameof(EmailOptions.Provider));
 
+// Whichever provider is chosen, it is reached through NonFatalEmailSender: these messages
+// are sent after the work they describe is already committed, so a dead mail server must
+// not turn a completed registration into a failed request.
 switch (emailProvider)
 {
     case EmailProvider.Smtp:
-        builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+        builder.Services.AddScoped<SmtpEmailSender>();
+        RegisterEmailSender<SmtpEmailSender>();
         break;
     case EmailProvider.Resend:
-        builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
+        builder.Services.AddHttpClient<ResendEmailSender>();
+        RegisterEmailSender<ResendEmailSender>();
         break;
     default:
-        builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+        builder.Services.AddScoped<LoggingEmailSender>();
+        RegisterEmailSender<LoggingEmailSender>();
         break;
 }
+
+void RegisterEmailSender<TProvider>() where TProvider : class, IEmailSender =>
+    builder.Services.AddScoped<IEmailSender>(services => new NonFatalEmailSender(
+        services.GetRequiredService<TProvider>(),
+        services.GetRequiredService<ILogger<NonFatalEmailSender>>()));
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

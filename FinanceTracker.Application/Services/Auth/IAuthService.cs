@@ -35,6 +35,14 @@ public interface IAuthService
 
     Task<bool> ResetPasswordAsync(ResetPasswordRequestDto request, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Emails a fresh confirmation link. The link from registration is single use, so
+    /// following it, losing it, or never receiving it leaves no other way to confirm.
+    /// Silent for an unknown, disabled, or already confirmed address, for the same reason
+    /// registration is.
+    /// </summary>
+    Task RequestEmailVerificationAsync(EmailOnlyRequestDto request, CancellationToken cancellationToken = default);
+
     Task<bool> VerifyEmailAsync(TokenRequestDto request, CancellationToken cancellationToken = default);
 
     Task<AuthResultDto?> RefreshAsync(TokenRequestDto request, CancellationToken cancellationToken = default);

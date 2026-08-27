@@ -304,6 +304,31 @@ public sealed class AuthService : IAuthService
         return true;
     }
 
+    public async Task RequestEmailVerificationAsync(
+        EmailOnlyRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await _users.GetByEmailAsync(Normalize(request.Email), cancellationToken);
+
+        // Unknown, disabled, or already confirmed: return quietly. The caller is told the
+        // same thing in every case, so none of those states can be read off the response.
+        if (user is null || user.Status != UserStatus.Active || user.EmailVerifiedAt is not null)
+            return;
+
+        var issued = _secretTokens.Issue(
+            user.Id, UserTokenPurpose.EmailVerification, TimeSpan.FromHours(_authOptions.EmailVerificationHours));
+
+        // Retire the earlier link first: asking for a new one should invalidate the old,
+        // so a confirmation link that leaked cannot outlive the request that replaced it.
+        await _users.ConsumeOutstandingTokensAsync(user.Id, UserTokenPurpose.EmailVerification, cancellationToken);
+        await _users.AddTokenAsync(issued.Record, cancellationToken);
+        await _users.SaveChangesAsync(cancellationToken);
+
+        await _email.SendAsync(
+            AuthEmailFactory.EmailVerification(user.Email, Link("verify-email", issued.PlainText)),
+            cancellationToken);
+    }
+
     public async Task<bool> VerifyEmailAsync(TokenRequestDto request, CancellationToken cancellationToken = default)
     {
         var user = await ConsumeTokenAsync(request.Token, UserTokenPurpose.EmailVerification, cancellationToken);

@@ -216,4 +216,57 @@ public class AuthTokenFlowTests
 
         replay.Should().BeNull("a replayed refresh token is the signature of a stolen one");
     }
+
+    // --- Resending the confirmation link ---
+
+    [Fact]
+    public async Task RequestEmailVerification_SendsALinkThatWorks()
+    {
+        using var h = await RegisteredAsync();
+        h.Email.Sent.Clear();
+
+        await h.Service.RequestEmailVerificationAsync(new EmailOnlyRequestDto { Email = Email });
+
+        var succeeded = await h.Service.VerifyEmailAsync(
+            new TokenRequestDto { Token = h.LastEmailedToken() });
+
+        succeeded.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RequestEmailVerification_RetiresTheLinkItReplaces()
+    {
+        using var h = await RegisteredAsync();
+        var original = h.LastEmailedToken();
+
+        await h.Service.RequestEmailVerificationAsync(new EmailOnlyRequestDto { Email = Email });
+
+        var replay = await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = original });
+
+        replay.Should().BeFalse("a confirmation link that leaked must not outlive its replacement");
+    }
+
+    [Fact]
+    public async Task RequestEmailVerification_ForAnUnknownAddress_SendsNothing()
+    {
+        using var h = await RegisteredAsync();
+        h.Email.Sent.Clear();
+
+        await h.Service.RequestEmailVerificationAsync(
+            new EmailOnlyRequestDto { Email = "nobody@example.com" });
+
+        h.Email.Sent.Should().BeEmpty("the response is identical either way, and so is the mail");
+    }
+
+    [Fact]
+    public async Task RequestEmailVerification_OnceAlreadyConfirmed_SendsNothing()
+    {
+        using var h = await RegisteredAsync();
+        await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = h.LastEmailedToken() });
+        h.Email.Sent.Clear();
+
+        await h.Service.RequestEmailVerificationAsync(new EmailOnlyRequestDto { Email = Email });
+
+        h.Email.Sent.Should().BeEmpty("there is nothing left to confirm");
+    }
 }
