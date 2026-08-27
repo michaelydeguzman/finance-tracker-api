@@ -19,5 +19,12 @@ namespace FinanceTracker.Infrastructure.Persistence
                 .OrderBy(x => x.Name)
                 .ToListAsync();
         }
+
+        public async Task<Frequency?> GetByIdAsync(Guid id)
+        {
+            return await _context.Frequencies
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id);
+        }
     }
 }

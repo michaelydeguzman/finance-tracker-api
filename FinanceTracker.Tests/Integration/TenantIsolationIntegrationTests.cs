@@ -190,6 +190,190 @@ public class TenantIsolationIntegrationTests : IClassFixture<FinanceTrackerWebAp
         });
     }
 
+    /// <summary>Plants a recurring template — and its category and frequency — belonging to someone else.</summary>
+    private async Task<(Guid CategoryId, Guid FrequencyId, Guid TemplateId)> SeedStrangerRecurringTransactionAsync()
+    {
+        var categoryId = Guid.NewGuid();
+        var frequencyId = Guid.NewGuid();
+        var templateId = Guid.NewGuid();
+
+        await _factory.SeedAsync(async context =>
+        {
+            context.Categories.Add(new Category
+            {
+                Id = categoryId,
+                Name = $"Stranger category {categoryId:N}",
+                CategoryType = CategoryType.Expense,
+                UserId = StrangerId
+            });
+
+            // Frequencies are shared reference data, deliberately outside the tenancy filter.
+            context.Frequencies.Add(new Frequency
+            {
+                Id = frequencyId,
+                Name = "Monthly",
+                Type = FrequencyType.Monthly,
+                IntervalDays = 30,
+                IsActive = true
+            });
+
+            context.RecurringTransactions.Add(new RecurringTransaction
+            {
+                Id = templateId,
+                Name = "Stranger's subscription",
+                DefaultAmount = 99m,
+                CategoryId = categoryId,
+                Category = null!,
+                UserId = StrangerId,
+                FrequencyId = frequencyId,
+                Frequency = null!,
+                StartDate = DateTime.UtcNow.AddMonths(-1),
+                NextOccurrenceDate = DateTime.UtcNow.AddDays(5),
+                Status = RecurringTransactionStatus.Active,
+                CreatedBy = "stranger@example.com"
+            });
+
+            await context.SaveChangesAsync();
+        });
+
+        return (categoryId, frequencyId, templateId);
+    }
+
+    [Fact]
+    public async Task RecurringTransactionList_ExcludesAnotherTenantsRows()
+    {
+        var (_, _, strangerTemplateId) = await SeedStrangerRecurringTransactionAsync();
+
+        var response = await _mine.GetAsync("/api/v1/recurring-transactions");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        body.Should().NotContain(strangerTemplateId.ToString());
+        body.Should().NotContain("Stranger's subscription");
+    }
+
+    [Fact]
+    public async Task ReadingAnotherTenantsRecurringTransaction_IsNotFound()
+    {
+        var (_, _, strangerTemplateId) = await SeedStrangerRecurringTransactionAsync();
+
+        var response = await _mine.GetAsync($"/api/v1/recurring-transactions/{strangerTemplateId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task UpdatingAnotherTenantsRecurringTransaction_IsNotFoundAndChangesNothing()
+    {
+        var (categoryId, frequencyId, strangerTemplateId) = await SeedStrangerRecurringTransactionAsync();
+
+        var response = await _mine.PutAsJsonAsync(
+            $"/api/v1/recurring-transactions/{strangerTemplateId}",
+            new UpdateRecurringTransactionDto
+            {
+                Name = "Hijacked",
+                Amount = 1m,
+                CategoryId = categoryId,
+                FrequencyId = frequencyId,
+                StartDate = DateTime.UtcNow.AddDays(1)
+            },
+            HttpJsonOptions.ForApi);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        await _factory.SeedAsync(async context =>
+        {
+            var row = await context.RecurringTransactions
+                .IgnoreQueryFilters()
+                .SingleAsync(r => r.Id == strangerTemplateId);
+
+            row.Name.Should().Be("Stranger's subscription");
+        });
+    }
+
+    [Theory]
+    [InlineData("pause")]
+    [InlineData("resume")]
+    [InlineData("cancel")]
+    public async Task TransitioningAnotherTenantsRecurringTransaction_IsNotFoundAndLeavesItActive(string transition)
+    {
+        // A transition is not a write to a body the filter inspects — it loads by id and
+        // mutates. If the filtered read ever stopped scoping, this is where it would show.
+        var (_, _, strangerTemplateId) = await SeedStrangerRecurringTransactionAsync();
+
+        var response = await _mine.PostAsync(
+            $"/api/v1/recurring-transactions/{strangerTemplateId}/{transition}", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        await _factory.SeedAsync(async context =>
+        {
+            var row = await context.RecurringTransactions
+                .IgnoreQueryFilters()
+                .SingleAsync(r => r.Id == strangerTemplateId);
+
+            row.Status.Should().Be(RecurringTransactionStatus.Active);
+        });
+    }
+
+    [Fact]
+    public async Task AnotherTenantsRecurringTransaction_SurvivesTheAttemptedDelete()
+    {
+        var (_, _, strangerTemplateId) = await SeedStrangerRecurringTransactionAsync();
+
+        var response = await _mine.DeleteAsync($"/api/v1/recurring-transactions/{strangerTemplateId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        await _factory.SeedAsync(async context =>
+        {
+            var stillThere = await context.RecurringTransactions
+                .IgnoreQueryFilters()
+                .AnyAsync(r => r.Id == strangerTemplateId);
+
+            stillThere.Should().BeTrue();
+        });
+    }
+
+    [Fact]
+    public async Task CreatedRecurringTransaction_IsStampedWithTheCallersTenantAndEmail()
+    {
+        var (_, frequencyId, _) = await SeedStrangerRecurringTransactionAsync();
+
+        var createCategory = await _mine.PostAsJsonAsync(
+            "/api/v1/categories",
+            new CreateCategoryDto { Name = $"Mine {Guid.NewGuid():N}", CategoryType = CategoryType.Expense },
+            HttpJsonOptions.ForApi);
+        createCategory.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var categoryId = (await createCategory.Content.ReadFromJsonAsync<ApiEnvelope<CategoryIdOnly>>(HttpJsonOptions.ForApi))!.Data!.Id;
+
+        var name = $"My subscription {Guid.NewGuid():N}";
+        var created = await _mine.PostAsJsonAsync(
+            "/api/v1/recurring-transactions",
+            new CreateRecurringTransactionDto
+            {
+                Name = name,
+                Amount = 15m,
+                CategoryId = categoryId,
+                FrequencyId = frequencyId,
+                StartDate = DateTime.UtcNow.AddDays(3)
+            },
+            HttpJsonOptions.ForApi);
+
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await _factory.SeedAsync(async context =>
+        {
+            var row = await context.RecurringTransactions
+                .IgnoreQueryFilters()
+                .SingleAsync(r => r.Name == name);
+
+            row.UserId.Should().Be(_factory.DefaultUserId, "ownership comes from the token, never the request body");
+            row.CreatedBy.Should().Be(_factory.DefaultUserEmail);
+        });
+    }
+
     private sealed record ApiEnvelope<T>(bool Success, string? Message, T? Data);
 
     private sealed record CategoryIdOnly(Guid Id);
