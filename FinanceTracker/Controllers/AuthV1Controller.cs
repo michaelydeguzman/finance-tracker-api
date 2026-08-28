@@ -7,6 +7,7 @@ using FinanceTracker.Application.Features.Auth.Commands.ExchangeExternalLogin;
 using FinanceTracker.Application.Features.Auth.Commands.Login;
 using FinanceTracker.Application.Features.Auth.Commands.RefreshSession;
 using FinanceTracker.Application.Features.Auth.Commands.Register;
+using FinanceTracker.Application.Features.Auth.Commands.RequestEmailVerification;
 using FinanceTracker.Application.Features.Auth.Commands.RequestMagicLink;
 using FinanceTracker.Application.Features.Auth.Commands.RequestPasswordReset;
 using FinanceTracker.Application.Features.Auth.Commands.ResetPassword;
@@ -122,6 +123,14 @@ namespace FinanceTracker.API.Controllers
             return succeeded
                 ? Ok(ApiResponseDto<object>.Ok(null!, "Your password has been changed."))
                 : BadRequest(ApiResponseDto<object>.Fail("That reset link is no longer valid."));
+        }
+
+        [HttpPost("verify-email/request")]
+        public async Task<ActionResult<ApiResponseDto<object>>> RequestEmailVerification(
+            [FromBody] EmailOnlyRequestDto dto)
+        {
+            await _sender.Send(new RequestEmailVerificationCommand(dto));
+            return Accepted(ApiResponseDto<object>.Ok(null!, NeutralAcknowledgement));
         }
 
         [HttpPost("verify-email")]
