@@ -69,7 +69,7 @@ public sealed class ResumeRecurringTransactionCommandHandler
             frequency.IntervalDays,
             template.StartDate,
             template.NextOccurrenceDate,
-            DateTime.UtcNow);
+            DateTime.UtcNow.Date);
 
         if (template.EndDate is { } end && resumedFrom > end)
         {

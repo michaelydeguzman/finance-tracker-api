@@ -80,7 +80,7 @@ public sealed class UpdateRecurringTransactionCommandHandler
             // Re-anchored on the new start date, through the same calculator, and again
             // without backfilling the interval that has already elapsed.
             template.NextOccurrenceDate = RecurrenceSchedule.FirstDueOnOrAfter(
-                frequency.Type, frequency.IntervalDays, dto.StartDate, dto.StartDate, DateTime.UtcNow);
+                frequency.Type, frequency.IntervalDays, dto.StartDate, dto.StartDate, DateTime.UtcNow.Date);
         }
 
         // An EndDate that now falls before the next occurrence is allowed, unlike at create

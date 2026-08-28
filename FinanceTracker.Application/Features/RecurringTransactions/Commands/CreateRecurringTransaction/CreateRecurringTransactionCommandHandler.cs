@@ -54,7 +54,10 @@ public sealed class CreateRecurringTransactionCommandHandler
                 "The selected frequency is custom but has no positive interval configured.");
         }
 
-        var now = DateTime.UtcNow;
+        // Date, not the instant. StartDate arrives as a calendar date at midnight, so
+        // comparing it against a wall-clock UtcNow makes every occurrence due *today*
+        // look like it has already passed, and the walk below skips a whole period.
+        var now = DateTime.UtcNow.Date;
 
         // Derived, never supplied. RecurrenceSchedule walks the sequence with
         // RecurrenceCalculator, so a start date of Jan 31 keeps snapping back to the 31st

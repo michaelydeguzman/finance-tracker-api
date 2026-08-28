@@ -74,6 +74,25 @@ public class CreateRecurringTransactionCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithAStartDateOfToday_SchedulesItToday_NotAPeriodLater()
+    {
+        // The regression this exists for. A date picker sends a calendar date at midnight.
+        // Comparing that against a wall-clock UtcNow made an occurrence due later the same
+        // day read as already gone by, so the walk advanced a whole period: a monthly
+        // template created at 22:00 for "today" silently lost its first payment.
+        //
+        // The worker generates on NextOccurrenceDate <= now, so it would have picked today
+        // up quite happily — only the seeding disagreed.
+        var start = DateTime.UtcNow.Date;
+
+        var result = await Handle(Dto(start));
+
+        result.Outcome.Should().Be(RecurringTransactionOutcome.Success);
+        result.Data!.NextOccurrenceDate.Should().Be(start,
+            "an occurrence due today has not gone by yet");
+    }
+
+    [Fact]
     public async Task Handle_WithAPastStartDate_SchedulesForwardInsteadOfBackfilling()
     {
         // Five months of history. NextOccurrenceDate = StartDate would hand the worker's
@@ -102,7 +121,7 @@ public class CreateRecurringTransactionCommandHandlerTests
         result.Outcome.Should().Be(RecurringTransactionOutcome.Success);
 
         var expected = RecurrenceSchedule.FirstDueOnOrAfter(
-            FrequencyType.Monthly, _frequency.IntervalDays, start, start, DateTime.UtcNow);
+            FrequencyType.Monthly, _frequency.IntervalDays, start, start, DateTime.UtcNow.Date);
 
         var next = result.Data!.NextOccurrenceDate;
         next.Should().Be(expected, "the date maths belongs to RecurrenceCalculator, reached through RecurrenceSchedule");
