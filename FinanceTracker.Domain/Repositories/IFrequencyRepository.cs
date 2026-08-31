@@ -4,11 +4,11 @@ namespace FinanceTracker.Domain.Repositories;
 
 public interface IFrequencyRepository
 {
-    Task<List<Frequency>> GetAllAsync();
+    Task<List<Frequency>> GetAllAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Frequencies are shared reference data, deliberately outside the tenancy filter,
     /// so this is not a tenant-scoped lookup and must never be used as one.
     /// </summary>
-    Task<Frequency?> GetByIdAsync(Guid id);
+    Task<Frequency?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 }

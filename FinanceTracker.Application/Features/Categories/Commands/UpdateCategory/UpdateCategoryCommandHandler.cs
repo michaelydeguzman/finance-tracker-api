@@ -15,7 +15,7 @@ public sealed class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategor
 
     public async Task<CategoryResponseDto?> Handle(UpdateCategoryCommand request, CancellationToken cancellationToken)
     {
-        var updated = await _categoryService.UpdateCategoryAsync(request.Id, request.Dto.Name, request.Dto.CategoryType);
+        var updated = await _categoryService.UpdateCategoryAsync(request.Id, request.Dto.Name, request.Dto.CategoryType, cancellationToken);
         return updated is null ? null : CategoryResponseDto.FromEntity(updated);
     }
 }

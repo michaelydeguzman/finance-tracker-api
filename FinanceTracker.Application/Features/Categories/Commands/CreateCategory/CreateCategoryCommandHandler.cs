@@ -29,7 +29,7 @@ public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategor
             IsActive = true
         };
 
-        var created = await _categoryService.AddCategoryAsync(category);
+        var created = await _categoryService.AddCategoryAsync(category, cancellationToken);
         return CategoryResponseDto.FromEntity(created);
     }
 }

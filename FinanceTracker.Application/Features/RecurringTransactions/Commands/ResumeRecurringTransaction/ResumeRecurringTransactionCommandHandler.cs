@@ -21,7 +21,7 @@ public sealed class ResumeRecurringTransactionCommandHandler
         ResumeRecurringTransactionCommand request,
         CancellationToken cancellationToken)
     {
-        var template = await _templates.GetTrackedByIdAsync(request.Id);
+        var template = await _templates.GetTrackedByIdAsync(request.Id, cancellationToken);
         if (template is null)
             return RecurringTransactionCommandResult.NotFound();
 
@@ -81,7 +81,7 @@ public sealed class ResumeRecurringTransactionCommandHandler
 
         template.NextOccurrenceDate = resumedFrom;
         template.Status = RecurringTransactionStatus.Active;
-        await _templates.SaveChangesAsync();
+        await _templates.SaveChangesAsync(cancellationToken);
 
         return RecurringTransactionCommandResult.Success(
             RecurringTransactionResponseDto.FromEntity(template));

@@ -23,10 +23,10 @@ public class RecurringTransactionTransitionHandlerTests
     private readonly Mock<IFrequencyRepository> _frequencies = new();
 
     private void Existing(RecurringTransaction template)
-        => _templates.Setup(t => t.GetTrackedByIdAsync(template.Id)).ReturnsAsync(template);
+        => _templates.Setup(t => t.GetTrackedByIdAsync(template.Id, It.IsAny<CancellationToken>())).ReturnsAsync(template);
 
     private void NothingVisible()
-        => _templates.Setup(t => t.GetTrackedByIdAsync(It.IsAny<Guid>())).ReturnsAsync((RecurringTransaction?)null);
+        => _templates.Setup(t => t.GetTrackedByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((RecurringTransaction?)null);
 
     private static RecurringTransaction Template(
         RecurringTransactionStatus status,
@@ -54,7 +54,7 @@ public class RecurringTransactionTransitionHandlerTests
         result.Outcome.Should().Be(RecurringTransactionOutcome.Success);
         template.Status.Should().Be(RecurringTransactionStatus.Paused);
         template.NextOccurrenceDate.Should().Be(scheduled, "pausing decides nothing about the schedule; resuming does");
-        _templates.Verify(t => t.SaveChangesAsync(), Times.Once);
+        _templates.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class RecurringTransactionTransitionHandlerTests
             .Handle(new PauseRecurringTransactionCommand(template.Id), CancellationToken.None);
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Success);
-        _templates.Verify(t => t.SaveChangesAsync(), Times.Never);
+        _templates.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class RecurringTransactionTransitionHandlerTests
         template.NextOccurrenceDate.Should().BeOnOrAfter(DateTime.UtcNow.Date,
             "the pause said those occurrences should not be recorded");
         template.NextOccurrenceDate.Day.Should().Be(10, "the walk stays anchored on StartDate");
-        _templates.Verify(t => t.SaveChangesAsync(), Times.Once);
+        _templates.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class RecurringTransactionTransitionHandlerTests
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Success);
         template.NextOccurrenceDate.Should().Be(due);
-        _templates.Verify(t => t.SaveChangesAsync(), Times.Never);
+        _templates.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public class RecurringTransactionTransitionHandlerTests
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Conflict);
         template.Status.Should().Be(RecurringTransactionStatus.Paused, "an inert Active template reads as broken");
-        _templates.Verify(t => t.SaveChangesAsync(), Times.Never);
+        _templates.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---- Cancel --------------------------------------------------------------------
@@ -194,7 +194,7 @@ public class RecurringTransactionTransitionHandlerTests
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Success);
         template.Status.Should().Be(RecurringTransactionStatus.Cancelled);
-        _templates.Verify(t => t.SaveChangesAsync(), Times.Once);
+        _templates.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -207,7 +207,7 @@ public class RecurringTransactionTransitionHandlerTests
             .Handle(new CancelRecurringTransactionCommand(template.Id), CancellationToken.None);
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Success);
-        _templates.Verify(t => t.SaveChangesAsync(), Times.Never);
+        _templates.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---- Delete --------------------------------------------------------------------
@@ -217,13 +217,13 @@ public class RecurringTransactionTransitionHandlerTests
     {
         var template = Template(RecurringTransactionStatus.Active);
         Existing(template);
-        _templates.Setup(t => t.CountGeneratedTransactionsAsync(template.Id)).ReturnsAsync(0);
+        _templates.Setup(t => t.CountGeneratedTransactionsAsync(template.Id, It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
         var result = await new DeleteRecurringTransactionCommandHandler(_templates.Object)
             .Handle(new DeleteRecurringTransactionCommand(template.Id), CancellationToken.None);
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Success);
-        _templates.Verify(t => t.DeleteAsync(template), Times.Once);
+        _templates.Verify(t => t.DeleteAsync(template, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -233,14 +233,14 @@ public class RecurringTransactionTransitionHandlerTests
         // record of where they came from, and nothing in the UI would show it happened.
         var template = Template(RecurringTransactionStatus.Active);
         Existing(template);
-        _templates.Setup(t => t.CountGeneratedTransactionsAsync(template.Id)).ReturnsAsync(7);
+        _templates.Setup(t => t.CountGeneratedTransactionsAsync(template.Id, It.IsAny<CancellationToken>())).ReturnsAsync(7);
 
         var result = await new DeleteRecurringTransactionCommandHandler(_templates.Object)
             .Handle(new DeleteRecurringTransactionCommand(template.Id), CancellationToken.None);
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Conflict);
         result.Message.Should().Contain("7").And.Contain("Cancel");
-        _templates.Verify(t => t.DeleteAsync(It.IsAny<RecurringTransaction>()), Times.Never);
+        _templates.Verify(t => t.DeleteAsync(It.IsAny<RecurringTransaction>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -252,16 +252,16 @@ public class RecurringTransactionTransitionHandlerTests
             .Handle(new DeleteRecurringTransactionCommand(Guid.NewGuid()), CancellationToken.None);
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.NotFound);
-        _templates.Verify(t => t.DeleteAsync(It.IsAny<RecurringTransaction>()), Times.Never);
+        _templates.Verify(t => t.DeleteAsync(It.IsAny<RecurringTransaction>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ---- Update --------------------------------------------------------------------
 
     private UpdateRecurringTransactionCommandHandler UpdateSut(RecurringTransaction template)
     {
-        _categories.Setup(c => c.GetByIdAsync(template.CategoryId)).ReturnsAsync(template.Category);
-        _frequencies.Setup(f => f.GetByIdAsync(template.FrequencyId)).ReturnsAsync(template.Frequency);
-        _templates.Setup(t => t.GetByIdAsync(template.Id)).ReturnsAsync(template);
+        _categories.Setup(c => c.GetByIdAsync(template.CategoryId, It.IsAny<CancellationToken>())).ReturnsAsync(template.Category);
+        _frequencies.Setup(f => f.GetByIdAsync(template.FrequencyId, It.IsAny<CancellationToken>())).ReturnsAsync(template.Frequency);
+        _templates.Setup(t => t.GetByIdAsync(template.Id, It.IsAny<CancellationToken>())).ReturnsAsync(template);
         return new UpdateRecurringTransactionCommandHandler(_templates.Object, _categories.Object, _frequencies.Object);
     }
 
@@ -329,7 +329,7 @@ public class RecurringTransactionTransitionHandlerTests
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Conflict);
         template.Name.Should().Be("Rent");
-        _templates.Verify(t => t.SaveChangesAsync(), Times.Never);
+        _templates.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -345,6 +345,6 @@ public class RecurringTransactionTransitionHandlerTests
             new UpdateRecurringTransactionCommand(Guid.NewGuid(), DtoFrom(template)), CancellationToken.None);
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.NotFound);
-        _templates.Verify(t => t.SaveChangesAsync(), Times.Never);
+        _templates.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 }

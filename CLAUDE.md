@@ -101,4 +101,10 @@ tracking is required to advance `NextOccurrenceDate`.
 - Controllers are versioned: `/api/v{version}/...`.
 - Transactions list pagination is 1-based, `pageSize` caps at 20, and paged responses carry
   `totalCount`. Calls without paging params must keep returning the full list.
+- Every repository and service method that does I/O takes a trailing
+  `CancellationToken cancellationToken = default` and forwards it to the EF call. MediatR
+  handlers pass the token they are given; a handler that drops it leaves queries running
+  after the client has gone. `ITransactionRepository.GetTransactionsQueryable()` is the
+  exception — nothing executes until the caller enumerates it, and that call site passes
+  its own token.
 - Add or update tests alongside behavior changes; prefer writing the failing test first.

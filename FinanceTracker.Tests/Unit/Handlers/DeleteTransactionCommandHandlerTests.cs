@@ -14,13 +14,13 @@ public class DeleteTransactionCommandHandlerTests
     {
         var id = Guid.NewGuid();
         var service = new Mock<ITransactionService>();
-        service.Setup(s => s.DeleteTransactionAsync(id)).ReturnsAsync(deleted);
+        service.Setup(s => s.DeleteTransactionAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(deleted);
 
         var sut = new DeleteTransactionCommandHandler(service.Object);
 
         var result = await sut.Handle(new DeleteTransactionCommand(id), CancellationToken.None);
 
         result.Should().Be(deleted);
-        service.Verify(s => s.DeleteTransactionAsync(id), Times.Once);
+        service.Verify(s => s.DeleteTransactionAsync(id, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

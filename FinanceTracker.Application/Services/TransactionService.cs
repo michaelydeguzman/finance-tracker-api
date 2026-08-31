@@ -21,31 +21,31 @@ public class TransactionService : ITransactionService
         _currentUser = currentUser;
     }
 
-    public async Task<Transaction> AddTransactionAsync(Transaction transaction)
+    public async Task<Transaction> AddTransactionAsync(Transaction transaction, CancellationToken cancellationToken = default)
     {
-        return await _transactionRepository.AddAsync(transaction);
+        return await _transactionRepository.AddAsync(transaction, cancellationToken);
     }
 
-    public async Task<Transaction?> GetByIdAsync(Guid id)
+    public async Task<Transaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await _transactionRepository.GetByIdAsync(id);
+        return await _transactionRepository.GetByIdAsync(id, cancellationToken);
     }
 
-    public async Task<List<Transaction>> GetAllAsync()
+    public async Task<List<Transaction>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        return await _transactionRepository.GetAllAsync();
+        return await _transactionRepository.GetAllAsync(cancellationToken);
     }
 
-    public async Task<List<Transaction>> GetByCategoryType(CategoryType categoryType)
+    public async Task<List<Transaction>> GetByCategoryType(CategoryType categoryType, CancellationToken cancellationToken = default)
     {
-        var categories = await _categoryRepository.GetByTypeAsync(categoryType);
+        var categories = await _categoryRepository.GetByTypeAsync(categoryType, cancellationToken);
         var categoryIds = categories.Select(c => c.Id).ToHashSet();
 
-        var transactions = await _transactionRepository.GetAllAsync();
+        var transactions = await _transactionRepository.GetAllAsync(cancellationToken);
         return transactions.Where(t => categoryIds.Contains(t.CategoryId)).ToList();
     }
 
-    public async Task<Transaction?> UpdateTransactionAsync(Guid id, UpdateTransactionDto dto)
+    public async Task<Transaction?> UpdateTransactionAsync(Guid id, UpdateTransactionDto dto, CancellationToken cancellationToken = default)
     {
         var transaction = new Transaction
         {
@@ -59,11 +59,11 @@ public class TransactionService : ITransactionService
             TransactionDate = dto.TransactionDate
         };
 
-        return await _transactionRepository.UpdateAsync(transaction);
+        return await _transactionRepository.UpdateAsync(transaction, cancellationToken);
     }
 
-    public async Task<bool> DeleteTransactionAsync(Guid id)
+    public async Task<bool> DeleteTransactionAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await _transactionRepository.DeleteAsync(id);
+        return await _transactionRepository.DeleteAsync(id, cancellationToken);
     }
 }

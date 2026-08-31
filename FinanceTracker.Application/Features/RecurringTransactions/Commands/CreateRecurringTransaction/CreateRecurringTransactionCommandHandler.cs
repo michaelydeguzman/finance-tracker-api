@@ -38,11 +38,11 @@ public sealed class CreateRecurringTransactionCommandHandler
         // The category lookup is tenancy-scoped, so this doubles as the ownership check:
         // another tenant's category id is simply not found, and no template can be pointed
         // at it.
-        var category = await _categories.GetByIdAsync(dto.CategoryId);
+        var category = await _categories.GetByIdAsync(dto.CategoryId, cancellationToken);
         if (category is null)
             return RecurringTransactionCommandResult.Invalid("Category not found.");
 
-        var frequency = await _frequencies.GetByIdAsync(dto.FrequencyId);
+        var frequency = await _frequencies.GetByIdAsync(dto.FrequencyId, cancellationToken);
         if (frequency is null || !frequency.IsActive)
             return RecurringTransactionCommandResult.Invalid("Frequency not found.");
 
@@ -95,8 +95,8 @@ public sealed class CreateRecurringTransactionCommandHandler
             CreatedBy = _currentUser.Email ?? _currentUser.RequireUserId().ToString()
         };
 
-        var created = await _templates.AddAsync(template);
-        var withRelations = await _templates.GetByIdAsync(created.Id);
+        var created = await _templates.AddAsync(template, cancellationToken);
+        var withRelations = await _templates.GetByIdAsync(created.Id, cancellationToken);
 
         return RecurringTransactionCommandResult.Success(
             RecurringTransactionResponseDto.FromEntity(withRelations ?? created));

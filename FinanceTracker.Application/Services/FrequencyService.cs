@@ -12,9 +12,9 @@ namespace FinanceTracker.Application.Services
             _repository = repository;
         }
 
-        public async Task<List<Frequency>> GetAllAsync()
+        public async Task<List<Frequency>> GetAllAsync(CancellationToken cancellationToken = default)
         {
-            return await _repository.GetAllAsync();
+            return await _repository.GetAllAsync(cancellationToken);
         }
     }
 }

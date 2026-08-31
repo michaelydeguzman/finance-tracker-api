@@ -15,7 +15,7 @@ public sealed class GetRecurringOptionsQueryHandler : IRequestHandler<GetRecurri
 
     public async Task<List<FrequencyResponseDto>> Handle(GetRecurringOptionsQuery request, CancellationToken cancellationToken)
     {
-        var options = await _frequencyService.GetAllAsync();
+        var options = await _frequencyService.GetAllAsync(cancellationToken);
         return options.Select(FrequencyResponseDto.FromEntity).ToList();
     }
 }

@@ -25,6 +25,30 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 
+// Ctrl+C should end the run cleanly rather than killing the process mid-save: the template
+// in flight is left untouched and still overdue, and the app lock is released on the way out.
+// Host.CreateDefaultBuilder only wires the console lifetime when the host is actually run,
+// and this is a run-and-exit job, so the token is established here instead.
+using var cancellation = new CancellationTokenSource();
+
+Console.CancelKeyPress += (_, eventArgs) =>
+{
+    eventArgs.Cancel = true;
+    cancellation.Cancel();
+};
+
 using var scope = host.Services.CreateScope();
 var generator = scope.ServiceProvider.GetRequiredService<TransactionGenerationService>();
-await generator.RunAsync();
+
+try
+{
+    await generator.RunAsync(cancellation.Token);
+}
+catch (OperationCanceledException)
+{
+    // A clean stop rather than a failure, but the exit code still has to say the run did not
+    // finish, so the scheduler does not record it as a completed generation.
+    return 2;
+}
+
+return 0;

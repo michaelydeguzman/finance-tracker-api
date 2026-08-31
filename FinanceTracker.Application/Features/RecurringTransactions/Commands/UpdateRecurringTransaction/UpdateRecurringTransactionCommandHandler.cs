@@ -30,7 +30,7 @@ public sealed class UpdateRecurringTransactionCommandHandler
         var dto = request.Dto;
 
         // Tenancy-scoped: another tenant's id resolves to null here and leaves as a 404.
-        var template = await _templates.GetTrackedByIdAsync(request.Id);
+        var template = await _templates.GetTrackedByIdAsync(request.Id, cancellationToken);
         if (template is null)
             return RecurringTransactionCommandResult.NotFound();
 
@@ -46,11 +46,11 @@ public sealed class UpdateRecurringTransactionCommandHandler
         if (dto.EndDate is { } end && end < dto.StartDate)
             return RecurringTransactionCommandResult.Invalid("EndDate cannot be earlier than StartDate.");
 
-        var category = await _categories.GetByIdAsync(dto.CategoryId);
+        var category = await _categories.GetByIdAsync(dto.CategoryId, cancellationToken);
         if (category is null)
             return RecurringTransactionCommandResult.Invalid("Category not found.");
 
-        var frequency = await _frequencies.GetByIdAsync(dto.FrequencyId);
+        var frequency = await _frequencies.GetByIdAsync(dto.FrequencyId, cancellationToken);
         if (frequency is null || !frequency.IsActive)
             return RecurringTransactionCommandResult.Invalid("Frequency not found.");
 
@@ -86,9 +86,9 @@ public sealed class UpdateRecurringTransactionCommandHandler
         // An EndDate that now falls before the next occurrence is allowed, unlike at create
         // time: shortening the window is how a user winds a template down after the last
         // occurrence they want, and the worker simply stops generating.
-        await _templates.SaveChangesAsync();
+        await _templates.SaveChangesAsync(cancellationToken);
 
-        var withRelations = await _templates.GetByIdAsync(template.Id);
+        var withRelations = await _templates.GetByIdAsync(template.Id, cancellationToken);
         return RecurringTransactionCommandResult.Success(
             RecurringTransactionResponseDto.FromEntity(withRelations ?? template));
     }

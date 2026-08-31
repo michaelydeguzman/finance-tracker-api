@@ -18,7 +18,7 @@ public sealed class GetRecurringTransactionByIdQueryHandler
     {
         // Another tenant's id comes back null from the filtered read, so the controller's
         // 404 is the same answer for "does not exist" and "is not yours".
-        var template = await _templates.GetByIdAsync(request.Id);
+        var template = await _templates.GetByIdAsync(request.Id, cancellationToken);
         return template is null ? null : RecurringTransactionResponseDto.FromEntity(template);
     }
 }

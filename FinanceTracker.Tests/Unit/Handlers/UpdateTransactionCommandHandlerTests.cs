@@ -13,9 +13,10 @@ public class UpdateTransactionCommandHandlerTests
     public async Task Handle_WhenTransactionMissing_ReturnsNull()
     {
         var service = new Mock<ITransactionService>();
-        service.Setup(s => s.UpdateTransactionAsync(It.IsAny<Guid>(), It.IsAny<UpdateTransactionDto>()))
+        service.Setup(s => s.UpdateTransactionAsync(
+                It.IsAny<Guid>(), It.IsAny<UpdateTransactionDto>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Transaction?)null);
-        service.Setup(s => s.GetByIdAsync(It.IsAny<Guid>())).Throws(new InvalidOperationException("Should not load when update failed"));
+        service.Setup(s => s.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).Throws(new InvalidOperationException("Should not load when update failed"));
 
         var sut = new UpdateTransactionCommandHandler(service.Object);
         var dto = new UpdateTransactionDto
@@ -29,7 +30,7 @@ public class UpdateTransactionCommandHandlerTests
         var result = await sut.Handle(new UpdateTransactionCommand(Guid.NewGuid(), dto), CancellationToken.None);
 
         result.Should().BeNull();
-        service.Verify(s => s.GetByIdAsync(It.IsAny<Guid>()), Times.Never);
+        service.Verify(s => s.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -71,8 +72,8 @@ public class UpdateTransactionCommandHandlerTests
         };
 
         var service = new Mock<ITransactionService>();
-        service.Setup(s => s.UpdateTransactionAsync(id, dto)).ReturnsAsync(bareUpdate);
-        service.Setup(s => s.GetByIdAsync(id)).ReturnsAsync(new Transaction
+        service.Setup(s => s.UpdateTransactionAsync(id, dto, It.IsAny<CancellationToken>())).ReturnsAsync(bareUpdate);
+        service.Setup(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new Transaction
         {
             Id = id,
             Name = dto.Name,
@@ -92,6 +93,6 @@ public class UpdateTransactionCommandHandlerTests
 
         result.Should().NotBeNull();
         result!.CategoryName.Should().Be("Travel");
-        service.Verify(s => s.GetByIdAsync(id), Times.Once);
+        service.Verify(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

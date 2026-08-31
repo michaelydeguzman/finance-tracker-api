@@ -16,8 +16,8 @@ public sealed class GetCategoriesQueryHandler : IRequestHandler<GetCategoriesQue
     public async Task<List<CategoryResponseDto>> Handle(GetCategoriesQuery request, CancellationToken cancellationToken)
     {
         var categories = request.Type.HasValue
-            ? await _categoryService.GetByTypeAsync(request.Type.Value)
-            : await _categoryService.GetAllAsync();
+            ? await _categoryService.GetByTypeAsync(request.Type.Value, cancellationToken)
+            : await _categoryService.GetAllAsync(cancellationToken);
 
         return categories.Select(CategoryResponseDto.FromEntity).ToList();
     }
