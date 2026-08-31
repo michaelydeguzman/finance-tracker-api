@@ -27,7 +27,7 @@ public class CreateRecurringTransactionCommandHandlerTests
 
         _templates
             .Setup(t => t.AddAsync(It.IsAny<RecurringTransaction>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((RecurringTransaction t) =>
+            .ReturnsAsync((RecurringTransaction t, CancellationToken _) =>
             {
                 _saved = t;
                 return t;

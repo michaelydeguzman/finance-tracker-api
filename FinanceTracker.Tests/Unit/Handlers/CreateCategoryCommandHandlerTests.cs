@@ -17,7 +17,7 @@ public class CreateCategoryCommandHandlerTests
         var categoryService = new Mock<ICategoryService>();
         categoryService
             .Setup(s => s.AddCategoryAsync(It.IsAny<Category>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Category c) => c);
+            .ReturnsAsync((Category c, CancellationToken _) => c);
 
         var sut = new CreateCategoryCommandHandler(categoryService.Object, new TestCurrentUserAccessor());
 

@@ -36,10 +36,10 @@ public class CreateTransactionCommandHandlerTests
         var service = new Mock<ITransactionService>(MockBehavior.Strict);
         service
             .Setup(s => s.AddTransactionAsync(It.IsAny<Transaction>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Transaction t) => t);
+            .ReturnsAsync((Transaction t, CancellationToken _) => t);
         service
             .Setup(s => s.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid id) => new Transaction
+            .ReturnsAsync((Guid id, CancellationToken _) => new Transaction
             {
                 Id = id,
                 Name = dto.Name,
