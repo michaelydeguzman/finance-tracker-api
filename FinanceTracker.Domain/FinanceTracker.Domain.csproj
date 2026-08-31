@@ -1,9 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+  <!--
+    Intentionally empty. Domain references no projects and no packages — that is the
+    layering rule, not an oversight — and TargetFramework, Nullable and ImplicitUsings
+    are inherited from Directory.Build.props at the repo root.
+  -->
 
 </Project>
