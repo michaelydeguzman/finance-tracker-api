@@ -6,7 +6,7 @@ using FinanceTracker.Application.Features.RecurringTransactions.Commands.PauseRe
 using FinanceTracker.Application.Features.RecurringTransactions.Commands.ResumeRecurringTransaction;
 using FinanceTracker.Application.Features.RecurringTransactions.Commands.UpdateRecurringTransaction;
 using FinanceTracker.Domain.Entities;
-using FinanceTracker.Infrastructure.Persistence;
+using FinanceTracker.Domain.Repositories;
 using FluentAssertions;
 using Moq;
 

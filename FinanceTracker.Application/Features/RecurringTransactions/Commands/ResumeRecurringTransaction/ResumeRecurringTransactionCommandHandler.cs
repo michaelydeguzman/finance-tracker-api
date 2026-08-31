@@ -1,7 +1,7 @@
 using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Domain.Entities;
+using FinanceTracker.Domain.Repositories;
 using FinanceTracker.Domain.Services;
-using FinanceTracker.Infrastructure.Persistence;
 using MediatR;
 
 namespace FinanceTracker.Application.Features.RecurringTransactions.Commands.ResumeRecurringTransaction;

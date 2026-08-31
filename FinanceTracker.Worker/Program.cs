@@ -1,3 +1,4 @@
+using FinanceTracker.Domain.Repositories;
 using FinanceTracker.Domain.Services;
 using FinanceTracker.Infrastructure.Persistence;
 using FinanceTracker.Worker.Services;

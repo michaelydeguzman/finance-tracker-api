@@ -3,7 +3,7 @@ using FinanceTracker.Application.Features.RecurringTransactions;
 using FinanceTracker.Application.Features.RecurringTransactions.Commands.CreateRecurringTransaction;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Domain.Services;
-using FinanceTracker.Infrastructure.Persistence;
+using FinanceTracker.Domain.Repositories;
 using FluentAssertions;
 using Moq;
 

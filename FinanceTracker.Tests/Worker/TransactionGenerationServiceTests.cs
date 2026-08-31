@@ -1,4 +1,5 @@
 using FinanceTracker.Domain.Entities;
+using FinanceTracker.Domain.Repositories;
 using FinanceTracker.Infrastructure.Persistence;
 using FinanceTracker.Worker.Services;
 using FluentAssertions;

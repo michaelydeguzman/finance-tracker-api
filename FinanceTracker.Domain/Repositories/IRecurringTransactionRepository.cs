@@ -1,6 +1,6 @@
 using FinanceTracker.Domain.Entities;
 
-namespace FinanceTracker.Infrastructure.Persistence;
+namespace FinanceTracker.Domain.Repositories;
 
 public interface IRecurringTransactionRepository
 {

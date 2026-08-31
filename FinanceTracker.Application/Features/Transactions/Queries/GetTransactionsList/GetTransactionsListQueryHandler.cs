@@ -1,5 +1,5 @@
 using FinanceTracker.Application.Dtos.Responses;
-using FinanceTracker.Infrastructure.Persistence;
+using FinanceTracker.Domain.Repositories;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

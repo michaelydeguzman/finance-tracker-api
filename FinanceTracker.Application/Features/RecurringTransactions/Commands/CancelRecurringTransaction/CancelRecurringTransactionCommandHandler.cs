@@ -1,6 +1,6 @@
 using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Domain.Entities;
-using FinanceTracker.Infrastructure.Persistence;
+using FinanceTracker.Domain.Repositories;
 using MediatR;
 
 namespace FinanceTracker.Application.Features.RecurringTransactions.Commands.CancelRecurringTransaction;
