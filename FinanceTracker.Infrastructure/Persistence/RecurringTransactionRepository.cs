@@ -1,4 +1,5 @@
 using FinanceTracker.Domain.Entities;
+using FinanceTracker.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTracker.Infrastructure.Persistence;
@@ -10,7 +11,9 @@ public class RecurringTransactionRepository : IRecurringTransactionRepository
     public RecurringTransactionRepository(FinanceTrackerContext context)
         => _context = context;
 
-    public Task<List<RecurringTransaction>> GetActiveOverdueAsync(DateTime asOf)
+    public Task<List<RecurringTransaction>> GetActiveOverdueAsync(
+        DateTime asOf,
+        CancellationToken cancellationToken = default)
         => _context.RecurringTransactions
             // Deliberately cross-tenant: the worker materialises due templates for every
             // user, and each generated Transaction inherits its owner from its template.
@@ -20,31 +23,35 @@ public class RecurringTransactionRepository : IRecurringTransactionRepository
             .Include(r => r.Category)
             .Where(r => r.Status == RecurringTransactionStatus.Active
                      && r.NextOccurrenceDate <= asOf)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
-    public async Task<RecurringTransaction> AddAsync(RecurringTransaction template)
+    public async Task<RecurringTransaction> AddAsync(
+        RecurringTransaction template,
+        CancellationToken cancellationToken = default)
     {
         _context.RecurringTransactions.Add(template);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
         return template;
     }
 
     // Every read below goes through the tenancy query filter — no IgnoreQueryFilters(), and
     // no hand-written UserId predicate that a later edit could drop.
-    public Task<RecurringTransaction?> GetByIdAsync(Guid id)
+    public Task<RecurringTransaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => _context.RecurringTransactions
             .AsNoTracking()
             .Include(r => r.Category)
             .Include(r => r.Frequency)
-            .FirstOrDefaultAsync(r => r.Id == id);
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
-    public Task<RecurringTransaction?> GetTrackedByIdAsync(Guid id)
+    public Task<RecurringTransaction?> GetTrackedByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => _context.RecurringTransactions
             .Include(r => r.Category)
             .Include(r => r.Frequency)
-            .FirstOrDefaultAsync(r => r.Id == id);
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
-    public Task<List<RecurringTransaction>> GetAllAsync(RecurringTransactionStatus? status)
+    public Task<List<RecurringTransaction>> GetAllAsync(
+        RecurringTransactionStatus? status,
+        CancellationToken cancellationToken = default)
     {
         var query = _context.RecurringTransactions
             .AsNoTracking()
@@ -59,17 +66,18 @@ public class RecurringTransactionRepository : IRecurringTransactionRepository
         return query
             .OrderBy(r => r.NextOccurrenceDate)
             .ThenBy(r => r.Name)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
     }
 
-    public Task SaveChangesAsync() => _context.SaveChangesAsync();
+    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+        => _context.SaveChangesAsync(cancellationToken);
 
-    public async Task DeleteAsync(RecurringTransaction template)
+    public async Task DeleteAsync(RecurringTransaction template, CancellationToken cancellationToken = default)
     {
         _context.RecurringTransactions.Remove(template);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
-    public Task<int> CountGeneratedTransactionsAsync(Guid templateId)
-        => _context.Transactions.CountAsync(t => t.RecurringTransactionId == templateId);
+    public Task<int> CountGeneratedTransactionsAsync(Guid templateId, CancellationToken cancellationToken = default)
+        => _context.Transactions.CountAsync(t => t.RecurringTransactionId == templateId, cancellationToken);
 }

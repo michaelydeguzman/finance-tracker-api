@@ -1,4 +1,5 @@
 using FinanceTracker.Domain.Entities;
+using FinanceTracker.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTracker.Infrastructure.Persistence
@@ -12,19 +13,19 @@ namespace FinanceTracker.Infrastructure.Persistence
             _context = context;
         }
 
-        public async Task<List<Frequency>> GetAllAsync()
+        public async Task<List<Frequency>> GetAllAsync(CancellationToken cancellationToken = default)
         {
             return await _context.Frequencies
                 .AsNoTracking()
                 .OrderBy(x => x.Name)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
 
-        public async Task<Frequency?> GetByIdAsync(Guid id)
+        public async Task<Frequency?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         {
             return await _context.Frequencies
                 .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == id);
+                .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         }
     }
 }

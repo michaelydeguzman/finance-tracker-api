@@ -1,5 +1,5 @@
 using FinanceTracker.Application.Dtos.Responses;
-using FinanceTracker.Infrastructure.Persistence;
+using FinanceTracker.Domain.Repositories;
 using MediatR;
 
 namespace FinanceTracker.Application.Features.RecurringTransactions.Queries.GetRecurringTransactions;
@@ -16,7 +16,7 @@ public sealed class GetRecurringTransactionsQueryHandler
         GetRecurringTransactionsQuery request,
         CancellationToken cancellationToken)
     {
-        var templates = await _templates.GetAllAsync(request.Status);
+        var templates = await _templates.GetAllAsync(request.Status, cancellationToken);
         return templates.Select(RecurringTransactionResponseDto.FromEntity).ToList();
     }
 }

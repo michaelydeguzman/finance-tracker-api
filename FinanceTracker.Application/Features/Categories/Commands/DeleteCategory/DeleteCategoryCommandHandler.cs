@@ -14,6 +14,6 @@ public sealed class DeleteCategoryCommandHandler : IRequestHandler<DeleteCategor
 
     public async Task<bool> Handle(DeleteCategoryCommand request, CancellationToken cancellationToken)
     {
-        return await _categoryService.DeleteCategoryAsync(request.Id);
+        return await _categoryService.DeleteCategoryAsync(request.Id, cancellationToken);
     }
 }

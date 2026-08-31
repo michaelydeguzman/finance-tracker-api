@@ -2,15 +2,18 @@ using FinanceTracker.Domain.Services;
 using System.Text;
 using System.Threading.RateLimiting;
 using FinanceTracker.API.Authentication;
+using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Options;
 using FinanceTracker.Application.Services;
 using FinanceTracker.Application.Services.Auth;
 using FinanceTracker.Application.Services.Email;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using FinanceTracker.Application.Features.Categories.Queries.GetCategories;
+using FinanceTracker.Domain.Repositories;
 using FinanceTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Asp.Versioning;
@@ -135,6 +138,31 @@ builder.Services.AddScoped<IRecurringTransactionRepository, RecurringTransaction
 // Add services to the container.
 
 builder.Services.AddControllers();
+
+// [ApiController] short-circuits any request that fails model validation before the action
+// body runs, so per-action ModelState checks were unreachable and their ApiResponseDto never
+// reached a client. The envelope is applied here instead, once, where the framework actually
+// builds that response — which also covers the endpoints that never had a manual check.
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var problems = context.ModelState.Values
+            .SelectMany(entry => entry.Errors)
+            .Select(error => error.ErrorMessage)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .ToArray();
+
+        // Model binding can reject a payload without attaching a message of its own (a
+        // malformed JSON body, or a non-Guid route value), so fall back to a generic line
+        // rather than returning an empty one.
+        var message = problems.Length > 0
+            ? string.Join(" ", problems)
+            : "Invalid request payload.";
+
+        return new BadRequestObjectResult(ApiResponseDto<object>.Fail(message));
+    };
+});
 
 // Add API versioning
 builder.Services.AddApiVersioning(options =>

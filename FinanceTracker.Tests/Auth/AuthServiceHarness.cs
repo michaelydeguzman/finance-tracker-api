@@ -1,6 +1,7 @@
 using FinanceTracker.Application.Options;
 using FinanceTracker.Application.Services.Auth;
 using FinanceTracker.Application.Services.Email;
+using FinanceTracker.Domain.Repositories;
 using FinanceTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;

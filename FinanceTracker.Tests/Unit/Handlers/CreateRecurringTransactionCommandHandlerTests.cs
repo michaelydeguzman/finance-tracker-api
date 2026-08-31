@@ -3,7 +3,7 @@ using FinanceTracker.Application.Features.RecurringTransactions;
 using FinanceTracker.Application.Features.RecurringTransactions.Commands.CreateRecurringTransaction;
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Domain.Services;
-using FinanceTracker.Infrastructure.Persistence;
+using FinanceTracker.Domain.Repositories;
 using FluentAssertions;
 using Moq;
 
@@ -22,12 +22,12 @@ public class CreateRecurringTransactionCommandHandlerTests
 
     public CreateRecurringTransactionCommandHandlerTests()
     {
-        _categories.Setup(c => c.GetByIdAsync(_category.Id)).ReturnsAsync(_category);
-        _frequencies.Setup(f => f.GetByIdAsync(_frequency.Id)).ReturnsAsync(_frequency);
+        _categories.Setup(c => c.GetByIdAsync(_category.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_category);
+        _frequencies.Setup(f => f.GetByIdAsync(_frequency.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_frequency);
 
         _templates
-            .Setup(t => t.AddAsync(It.IsAny<RecurringTransaction>()))
-            .ReturnsAsync((RecurringTransaction t) =>
+            .Setup(t => t.AddAsync(It.IsAny<RecurringTransaction>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((RecurringTransaction t, CancellationToken _) =>
             {
                 _saved = t;
                 return t;
@@ -35,7 +35,7 @@ public class CreateRecurringTransactionCommandHandlerTests
 
         // Mirrors the real repository re-reading the row with its navigations loaded.
         _templates
-            .Setup(t => t.GetByIdAsync(It.IsAny<Guid>()))
+            .Setup(t => t.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {
                 if (_saved is null) return null;
@@ -147,7 +147,7 @@ public class CreateRecurringTransactionCommandHandlerTests
         var act = () => sut.Handle(new CreateRecurringTransactionCommand(Dto(DateTime.UtcNow.AddDays(1))), CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
-        _templates.Verify(t => t.AddAsync(It.IsAny<RecurringTransaction>()), Times.Never);
+        _templates.Verify(t => t.AddAsync(It.IsAny<RecurringTransaction>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class CreateRecurringTransactionCommandHandlerTests
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Invalid);
         result.Message.Should().Contain("Category");
-        _templates.Verify(t => t.AddAsync(It.IsAny<RecurringTransaction>()), Times.Never);
+        _templates.Verify(t => t.AddAsync(It.IsAny<RecurringTransaction>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class CreateRecurringTransactionCommandHandlerTests
         var result = await Handle(dto);
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Invalid);
-        _templates.Verify(t => t.AddAsync(It.IsAny<RecurringTransaction>()), Times.Never);
+        _templates.Verify(t => t.AddAsync(It.IsAny<RecurringTransaction>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public class CreateRecurringTransactionCommandHandlerTests
         var result = await Handle(Dto(DateTime.UtcNow.AddMonths(-6), DateTime.UtcNow.AddMonths(-3)));
 
         result.Outcome.Should().Be(RecurringTransactionOutcome.Invalid);
-        _templates.Verify(t => t.AddAsync(It.IsAny<RecurringTransaction>()), Times.Never);
+        _templates.Verify(t => t.AddAsync(It.IsAny<RecurringTransaction>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public class CreateRecurringTransactionCommandHandlerTests
             IntervalDays = null,
             IsActive = true
         };
-        _frequencies.Setup(f => f.GetByIdAsync(broken.Id)).ReturnsAsync(broken);
+        _frequencies.Setup(f => f.GetByIdAsync(broken.Id, It.IsAny<CancellationToken>())).ReturnsAsync(broken);
 
         var dto = Dto(DateTime.UtcNow.AddMonths(-2));
         dto.FrequencyId = broken.Id;

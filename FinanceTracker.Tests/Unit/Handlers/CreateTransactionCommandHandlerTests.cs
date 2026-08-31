@@ -35,11 +35,11 @@ public class CreateTransactionCommandHandlerTests
 
         var service = new Mock<ITransactionService>(MockBehavior.Strict);
         service
-            .Setup(s => s.AddTransactionAsync(It.IsAny<Transaction>()))
-            .ReturnsAsync((Transaction t) => t);
+            .Setup(s => s.AddTransactionAsync(It.IsAny<Transaction>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Transaction t, CancellationToken _) => t);
         service
-            .Setup(s => s.GetByIdAsync(It.IsAny<Guid>()))
-            .ReturnsAsync((Guid id) => new Transaction
+            .Setup(s => s.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => new Transaction
             {
                 Id = id,
                 Name = dto.Name,
@@ -62,7 +62,8 @@ public class CreateTransactionCommandHandlerTests
         result.CategoryName.Should().Be("Food");
         result.CategoryType.Should().Be(CategoryType.Expense.ToString());
         service.Verify(s => s.AddTransactionAsync(It.Is<Transaction>(t =>
-            t.Name == dto.Name && t.CategoryId == categoryId && t.CreatedBy == TestCurrentUserAccessor.DefaultEmail)), Times.Once);
-        service.Verify(s => s.GetByIdAsync(It.IsAny<Guid>()), Times.Once);
+            t.Name == dto.Name && t.CategoryId == categoryId && t.CreatedBy == TestCurrentUserAccessor.DefaultEmail),
+            It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(s => s.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

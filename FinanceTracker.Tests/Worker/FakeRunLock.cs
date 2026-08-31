@@ -16,7 +16,7 @@ public sealed class FakeRunLock : IRunLock
 
     public bool Released { get; private set; }
 
-    public Task<bool> TryAcquireAsync()
+    public Task<bool> TryAcquireAsync(CancellationToken cancellationToken = default)
     {
         AcquireAttempted = true;
         return Task.FromResult(_canAcquire);

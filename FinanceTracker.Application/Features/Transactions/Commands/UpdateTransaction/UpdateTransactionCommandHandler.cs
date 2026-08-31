@@ -15,11 +15,11 @@ public sealed class UpdateTransactionCommandHandler : IRequestHandler<UpdateTran
 
     public async Task<TransactionResponseDto?> Handle(UpdateTransactionCommand request, CancellationToken cancellationToken)
     {
-        var updated = await _transactionService.UpdateTransactionAsync(request.Id, request.Dto);
+        var updated = await _transactionService.UpdateTransactionAsync(request.Id, request.Dto, cancellationToken);
         if (updated is null)
             return null;
 
-        var withRelations = await _transactionService.GetByIdAsync(request.Id);
+        var withRelations = await _transactionService.GetByIdAsync(request.Id, cancellationToken);
         return TransactionResponseDto.FromEntity(withRelations ?? updated);
     }
 }

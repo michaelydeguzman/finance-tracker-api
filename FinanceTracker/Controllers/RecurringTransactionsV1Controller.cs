@@ -56,9 +56,6 @@ public class RecurringTransactionsV1Controller : ControllerBase
     public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> AddRecurringTransaction(
         [FromBody] CreateRecurringTransactionDto dto)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ApiResponseDto<RecurringTransactionResponseDto>.Fail("Invalid request payload."));
-
         var result = await _sender.Send(new CreateRecurringTransactionCommand(dto));
 
         if (result.Outcome is not RecurringTransactionOutcome.Success)
@@ -75,9 +72,6 @@ public class RecurringTransactionsV1Controller : ControllerBase
         Guid id,
         [FromBody] UpdateRecurringTransactionDto dto)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ApiResponseDto<RecurringTransactionResponseDto>.Fail("Invalid request payload."));
-
         return Respond(await _sender.Send(new UpdateRecurringTransactionCommand(id, dto)));
     }
 

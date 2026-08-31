@@ -33,8 +33,8 @@ public sealed class CreateTransactionCommandHandler : IRequestHandler<CreateTran
             CreatedBy = _currentUser.Email ?? _currentUser.RequireUserId().ToString()
         };
 
-        var created = await _transactionService.AddTransactionAsync(transaction);
-        var createdWithRelations = await _transactionService.GetByIdAsync(created.Id);
+        var created = await _transactionService.AddTransactionAsync(transaction, cancellationToken);
+        var createdWithRelations = await _transactionService.GetByIdAsync(created.Id, cancellationToken);
 
         return TransactionResponseDto.FromEntity(createdWithRelations ?? created);
     }

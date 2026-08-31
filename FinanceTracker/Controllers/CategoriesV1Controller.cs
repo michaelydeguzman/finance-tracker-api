@@ -29,9 +29,6 @@ namespace FinanceTracker.Controllers
         [HttpPost]
         public async Task<ActionResult<ApiResponseDto<CategoryResponseDto>>> AddCategory([FromBody] CreateCategoryDto dto)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ApiResponseDto<CategoryResponseDto>.Fail("Invalid request payload."));
-
             var response = await _sender.Send(new CreateCategoryCommand(dto));
             return CreatedAtAction(nameof(GetCategoryById), new { id = response.Id }, ApiResponseDto<CategoryResponseDto>.Ok(response));
         }
@@ -39,9 +36,6 @@ namespace FinanceTracker.Controllers
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponseDto<CategoryResponseDto>>> UpdateCategory(Guid id, [FromBody] UpdateCategoryDto dto)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ApiResponseDto<CategoryResponseDto>.Fail("Invalid request payload."));
-
             var updated = await _sender.Send(new UpdateCategoryCommand(id, dto));
             if (updated is null)
                 return NotFound(ApiResponseDto<CategoryResponseDto>.Fail("Category not found."));

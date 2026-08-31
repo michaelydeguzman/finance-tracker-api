@@ -16,8 +16,12 @@ public interface IRunLock
     /// in which case the caller must skip its run and must not call
     /// <see cref="ReleaseAsync"/> — releasing a lock this process does not own is an error.
     /// </summary>
-    Task<bool> TryAcquireAsync();
+    Task<bool> TryAcquireAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Releases a lock previously taken by <see cref="TryAcquireAsync"/>.</summary>
+    /// <summary>
+    /// Releases a lock previously taken by <see cref="TryAcquireAsync"/>. Takes no
+    /// cancellation token on purpose: it runs on the shutdown path, where a token is already
+    /// cancelled, and a release that skipped itself there would strand the lock.
+    /// </summary>
     Task ReleaseAsync();
 }

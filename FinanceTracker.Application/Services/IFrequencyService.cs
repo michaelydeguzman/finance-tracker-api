@@ -4,6 +4,6 @@ namespace FinanceTracker.Application.Services
 {
     public interface IFrequencyService
     {
-        Task<List<Frequency>> GetAllAsync();
+        Task<List<Frequency>> GetAllAsync(CancellationToken cancellationToken = default);
     }
 }

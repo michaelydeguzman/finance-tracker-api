@@ -2,7 +2,7 @@ using FinanceTracker.Application.Dtos.Auth;
 using FinanceTracker.Application.Options;
 using FinanceTracker.Application.Services.Email;
 using FinanceTracker.Domain.Entities;
-using FinanceTracker.Infrastructure.Persistence;
+using FinanceTracker.Domain.Repositories;
 using Microsoft.Extensions.Options;
 
 namespace FinanceTracker.Application.Services.Auth;

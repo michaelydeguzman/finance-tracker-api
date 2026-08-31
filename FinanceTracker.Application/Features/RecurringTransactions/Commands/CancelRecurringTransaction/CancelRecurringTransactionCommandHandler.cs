@@ -1,6 +1,6 @@
 using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Domain.Entities;
-using FinanceTracker.Infrastructure.Persistence;
+using FinanceTracker.Domain.Repositories;
 using MediatR;
 
 namespace FinanceTracker.Application.Features.RecurringTransactions.Commands.CancelRecurringTransaction;
@@ -22,7 +22,7 @@ public sealed class CancelRecurringTransactionCommandHandler
         CancelRecurringTransactionCommand request,
         CancellationToken cancellationToken)
     {
-        var template = await _templates.GetTrackedByIdAsync(request.Id);
+        var template = await _templates.GetTrackedByIdAsync(request.Id, cancellationToken);
         if (template is null)
             return RecurringTransactionCommandResult.NotFound();
 
@@ -31,7 +31,7 @@ public sealed class CancelRecurringTransactionCommandHandler
         if (template.Status != RecurringTransactionStatus.Cancelled)
         {
             template.Status = RecurringTransactionStatus.Cancelled;
-            await _templates.SaveChangesAsync();
+            await _templates.SaveChangesAsync(cancellationToken);
         }
 
         return RecurringTransactionCommandResult.Success(

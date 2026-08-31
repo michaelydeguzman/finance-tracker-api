@@ -14,6 +14,6 @@ public sealed class DeleteTransactionCommandHandler : IRequestHandler<DeleteTran
 
     public async Task<bool> Handle(DeleteTransactionCommand request, CancellationToken cancellationToken)
     {
-        return await _transactionService.DeleteTransactionAsync(request.Id);
+        return await _transactionService.DeleteTransactionAsync(request.Id, cancellationToken);
     }
 }

@@ -1,4 +1,4 @@
-using FinanceTracker.Infrastructure.Persistence;
+using FinanceTracker.Domain.Repositories;
 using MediatR;
 
 namespace FinanceTracker.Application.Features.RecurringTransactions.Commands.DeleteRecurringTransaction;
@@ -18,7 +18,7 @@ public sealed class DeleteRecurringTransactionCommandHandler
         DeleteRecurringTransactionCommand request,
         CancellationToken cancellationToken)
     {
-        var template = await _templates.GetTrackedByIdAsync(request.Id);
+        var template = await _templates.GetTrackedByIdAsync(request.Id, cancellationToken);
         if (template is null)
             return RecurringTransactionCommandResult.NotFound();
 
@@ -30,7 +30,7 @@ public sealed class DeleteRecurringTransactionCommandHandler
         // A template that has generated nothing has no history to protect — that is the
         // just-created typo, and deleting it is exactly right. Everything else is asked to
         // cancel instead, which keeps the row and its links while stopping generation.
-        var generated = await _templates.CountGeneratedTransactionsAsync(template.Id);
+        var generated = await _templates.CountGeneratedTransactionsAsync(template.Id, cancellationToken);
         if (generated > 0)
         {
             return RecurringTransactionCommandResult.Conflict(
@@ -38,7 +38,7 @@ public sealed class DeleteRecurringTransactionCommandHandler
                 "Cancel it instead, so those transactions keep their history.");
         }
 
-        await _templates.DeleteAsync(template);
+        await _templates.DeleteAsync(template, cancellationToken);
 
         return new RecurringTransactionCommandResult(
             RecurringTransactionOutcome.Success,

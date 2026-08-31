@@ -23,12 +23,12 @@ public sealed class SqlServerRunLock : IRunLock
 
     public SqlServerRunLock(FinanceTrackerContext context) => _context = context;
 
-    public async Task<bool> TryAcquireAsync()
+    public async Task<bool> TryAcquireAsync(CancellationToken cancellationToken = default)
     {
         _connection = _context.Database.GetDbConnection();
 
         if (_connection.State != ConnectionState.Open)
-            await _connection.OpenAsync();
+            await _connection.OpenAsync(cancellationToken);
 
         using var command = _connection.CreateCommand();
         command.CommandText = "sp_getapplock";
@@ -40,7 +40,7 @@ public sealed class SqlServerRunLock : IRunLock
         var returnValue = new SqlParameter { Direction = ParameterDirection.ReturnValue };
         command.Parameters.Add(returnValue);
 
-        await ((SqlCommand)command).ExecuteNonQueryAsync();
+        await ((SqlCommand)command).ExecuteNonQueryAsync(cancellationToken);
 
         return (int)returnValue.Value! >= 0;
     }

@@ -16,8 +16,8 @@ public class CreateCategoryCommandHandlerTests
 
         var categoryService = new Mock<ICategoryService>();
         categoryService
-            .Setup(s => s.AddCategoryAsync(It.IsAny<Category>()))
-            .ReturnsAsync((Category c) => c);
+            .Setup(s => s.AddCategoryAsync(It.IsAny<Category>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Category c, CancellationToken _) => c);
 
         var sut = new CreateCategoryCommandHandler(categoryService.Object, new TestCurrentUserAccessor());
 
@@ -27,6 +27,6 @@ public class CreateCategoryCommandHandlerTests
         result.CategoryType.Should().Be(CategoryType.Expense);
         categoryService.Verify(s => s.AddCategoryAsync(It.Is<Category>(c =>
             c.Name == dto.Name && c.CategoryType == dto.CategoryType && c.IsActive
-            && c.UserId == TestCurrentUserAccessor.DefaultUserId)), Times.Once);
+            && c.UserId == TestCurrentUserAccessor.DefaultUserId), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

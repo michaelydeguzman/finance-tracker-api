@@ -1,4 +1,5 @@
 using FinanceTracker.Domain.Entities;
+using FinanceTracker.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTracker.Infrastructure.Persistence
@@ -12,14 +13,14 @@ namespace FinanceTracker.Infrastructure.Persistence
             _context = context;
         }
 
-        public async Task<Transaction> AddAsync(Transaction transaction)
+        public async Task<Transaction> AddAsync(Transaction transaction, CancellationToken cancellationToken = default)
         {
             _context.Transactions.Add(transaction);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(cancellationToken);
             return transaction;
         }
 
-        public async Task<Transaction?> GetByIdAsync(Guid id)
+        public async Task<Transaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         {
             return await _context.Transactions
                 .AsNoTracking()
@@ -29,7 +30,7 @@ namespace FinanceTracker.Infrastructure.Persistence
                 // transaction, because the navigation is simply never loaded.
                 .Include(x => x.RecurringTransaction!)
                     .ThenInclude(r => r.Frequency)
-                .FirstOrDefaultAsync(x => x.Id == id);
+                .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         }
 
         public IQueryable<Transaction> GetTransactionsQueryable()
@@ -41,16 +42,16 @@ namespace FinanceTracker.Infrastructure.Persistence
                     .ThenInclude(r => r.Frequency);
         }
 
-        public async Task<List<Transaction>> GetAllAsync()
+        public async Task<List<Transaction>> GetAllAsync(CancellationToken cancellationToken = default)
         {
             return await GetTransactionsQueryable()
                 .OrderByDescending(x => x.CreatedAt)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
 
-        public async Task<Transaction?> UpdateAsync(Transaction transaction)
+        public async Task<Transaction?> UpdateAsync(Transaction transaction, CancellationToken cancellationToken = default)
         {
-            var entity = await _context.Transactions.FindAsync(transaction.Id);
+            var entity = await _context.Transactions.FindAsync(new object?[] { transaction.Id }, cancellationToken);
             if (entity is null)
                 return null;
 
@@ -60,18 +61,18 @@ namespace FinanceTracker.Infrastructure.Persistence
             entity.Amount = transaction.Amount;
             entity.TransactionDate = transaction.TransactionDate;
 
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(cancellationToken);
             return entity;
         }
 
-        public async Task<bool> DeleteAsync(Guid id)
+        public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
         {
-            var entity = await _context.Transactions.FindAsync(id);
+            var entity = await _context.Transactions.FindAsync(new object?[] { id }, cancellationToken);
             if (entity is null)
                 return false;
 
             _context.Transactions.Remove(entity);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(cancellationToken);
             return true;
         }
     }

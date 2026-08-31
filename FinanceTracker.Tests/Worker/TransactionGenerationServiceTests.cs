@@ -1,4 +1,5 @@
 using FinanceTracker.Domain.Entities;
+using FinanceTracker.Domain.Repositories;
 using FinanceTracker.Infrastructure.Persistence;
 using FinanceTracker.Worker.Services;
 using FluentAssertions;
@@ -71,7 +72,7 @@ public class TransactionGenerationServiceTests
         var originalDate = template.NextOccurrenceDate;
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction> { template });
 
         var service = CreateService(context, mockRepo.Object);
@@ -91,7 +92,7 @@ public class TransactionGenerationServiceTests
         var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-3).AddMinutes(5));
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction> { template });
 
         var service = CreateService(context, mockRepo.Object);
@@ -107,7 +108,7 @@ public class TransactionGenerationServiceTests
         using var context = CreateInMemoryContext();
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction>()); // repo filters out Paused
 
         var service = CreateService(context, mockRepo.Object);
@@ -123,7 +124,7 @@ public class TransactionGenerationServiceTests
         using var context = CreateInMemoryContext();
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction>()); // repo filters out Cancelled
 
         var service = CreateService(context, mockRepo.Object);
@@ -139,7 +140,7 @@ public class TransactionGenerationServiceTests
         using var context = CreateInMemoryContext();
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction>()); // repo filters out future-dated
 
         var service = CreateService(context, mockRepo.Object);
@@ -162,7 +163,7 @@ public class TransactionGenerationServiceTests
         var originalNextDate = template.NextOccurrenceDate;
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction> { template });
 
         var service = CreateService(context, mockRepo.Object);
@@ -187,7 +188,7 @@ public class TransactionGenerationServiceTests
         var originalDate = template.NextOccurrenceDate;
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction> { template });
 
         var service = CreateService(context, mockRepo.Object);
@@ -213,7 +214,7 @@ public class TransactionGenerationServiceTests
         var originalNextDate = template.NextOccurrenceDate;
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction> { template });
 
         var service = CreateService(context, mockRepo.Object);
@@ -238,7 +239,7 @@ public class TransactionGenerationServiceTests
             endDate: occurrenceDate);
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction> { template });
 
         var service = CreateService(context, mockRepo.Object);
@@ -275,7 +276,7 @@ public class TransactionGenerationServiceTests
         var goodTemplate = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1).AddMinutes(5));
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction> { badTemplate, goodTemplate });
 
         var service = CreateService(context, mockRepo.Object);
@@ -294,7 +295,7 @@ public class TransactionGenerationServiceTests
         var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1).AddMinutes(5));
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction> { template });
 
         var runLock = new FakeRunLock(canAcquire: false);
@@ -303,7 +304,7 @@ public class TransactionGenerationServiceTests
         await service.RunAsync();
 
         context.Transactions.Should().BeEmpty("a concurrent run already holds the lock");
-        mockRepo.Verify(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()), Times.Never,
+        mockRepo.Verify(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never,
             "the run should bail out before querying for work");
     }
 
@@ -329,7 +330,7 @@ public class TransactionGenerationServiceTests
         var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1).AddMinutes(5));
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<RecurringTransaction> { template });
 
         var runLock = new FakeRunLock();
@@ -345,7 +346,7 @@ public class TransactionGenerationServiceTests
         using var context = CreateInMemoryContext();
 
         var mockRepo = new Mock<IRecurringTransactionRepository>();
-        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>()))
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("repository unavailable"));
 
         var runLock = new FakeRunLock();
@@ -353,6 +354,53 @@ public class TransactionGenerationServiceTests
 
         await service.Invoking(x => x.RunAsync())
             .Should().ThrowAsync<InvalidOperationException>();
+
+        runLock.Released.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenCancelledBeforeItStarts_GeneratesNothingAndReleasesTheLock()
+    {
+        using var context = CreateInMemoryContext();
+        var template = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1));
+        var originalDate = template.NextOccurrenceDate;
+
+        var mockRepo = new Mock<IRecurringTransactionRepository>();
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<RecurringTransaction> { template });
+
+        var runLock = new FakeRunLock();
+        var service = CreateService(context, mockRepo.Object, runLock);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await service.Invoking(x => x.RunAsync(cancellation.Token))
+            .Should().ThrowAsync<OperationCanceledException>();
+
+        // The overdue template is untouched, so the next run still sees it as due.
+        context.Transactions.Should().BeEmpty();
+        template.NextOccurrenceDate.Should().Be(originalDate);
+        runLock.Released.Should().BeTrue("a cancelled run must not strand the lock");
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenTheRepositoryReportsCancellation_DoesNotSwallowItAsATemplateFailure()
+    {
+        // The per-template catch exists to isolate one bad template from the rest. Cancellation
+        // is not that: if it were caught there, the run would carry on through every remaining
+        // template after being told to stop.
+        using var context = CreateInMemoryContext();
+
+        var mockRepo = new Mock<IRecurringTransactionRepository>();
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var runLock = new FakeRunLock();
+        var service = CreateService(context, mockRepo.Object, runLock);
+
+        await service.Invoking(x => x.RunAsync(CancellationToken.None))
+            .Should().ThrowAsync<OperationCanceledException>();
 
         runLock.Released.Should().BeTrue();
     }
