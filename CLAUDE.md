@@ -43,6 +43,28 @@ curl -k https://localhost:7203/api/v1/categories
 
 Stop the VS session if you genuinely need a CLI build.
 
+## Build configuration
+
+Three root-level files own settings that used to be repeated per project. A new project
+inherits all of it and should declare almost nothing itself.
+
+| File | Owns |
+|---|---|
+| `Directory.Build.props` | `TargetFramework`, `Nullable`, `ImplicitUsings` for every project. |
+| `Directory.Packages.props` | Every package version, via central package management. |
+| `.editorconfig` | Code style — file-scoped namespaces, `_camelCase` private fields, Allman braces. |
+
+**Do not put a `Version` attribute on a `PackageReference`.** With central package management
+on, that is an error (NU1008). Add or change the version in `Directory.Packages.props`
+instead; the `.csproj` names the package only.
+
+Style rules are advisory: `EnforceCodeStyleInBuild` is deliberately not set, so nothing in
+`.editorconfig` fails a build. Apply them in bulk with:
+
+```bash
+dotnet format style FinanceTracker/FinanceTracker.API.sln
+```
+
 ## Configuration and secrets
 
 The SQL Server connection string lives in **`dotnet user-secrets`**, not in `appsettings*.json`:

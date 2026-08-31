@@ -1,0 +1,19 @@
+<Project>
+
+  <!--
+    Settings every project in the repo shares. They were copy-pasted identically into all six
+    .csproj files (in two different orders), which meant a seventh project could silently miss
+    one, and adding an eighth setting meant remembering six edits.
+
+    Deliberately not set here yet: TreatWarningsAsErrors, EnableNETAnalyzers and
+    EnforceCodeStyleInBuild. Turning those on is the point of having this file, but each one
+    surfaces a batch of existing warnings that wants triaging on its own, not smuggled into a
+    build-configuration change.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,105 @@
+# Editor and code-style conventions for the repo.
+#
+# These are advisory today: EnforceCodeStyleInBuild is deliberately NOT set in
+# Directory.Build.props, so nothing here fails a build or turns CI red. They surface as
+# IDE suggestions in Visual Studio and Rider, and `dotnet format` applies them in bulk:
+#
+#     dotnet format style FinanceTracker/FinanceTracker.API.sln
+#
+# The point is to have one written-down answer. Without this file the codebase drifted into
+# two of everything — file-scoped namespaces in the controllers and Application/Features,
+# block-scoped in the repositories and entities — because "match the surrounding style"
+# depends entirely on which file you happen to open first.
+
+root = true
+
+[*]
+indent_style = space
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{csproj,props,targets,config}]
+indent_size = 2
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.md]
+indent_size = 2
+# Two trailing spaces are a hard line break in Markdown.
+trim_trailing_whitespace = false
+
+[*.cs]
+indent_size = 4
+
+#### Namespaces ####
+
+# The convention this repo is converging on. Block-scoped namespaces cost a level of
+# indentation for nothing.
+csharp_style_namespace_declarations = file_scoped:warning
+
+#### Usings ####
+
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:warning
+
+#### Naming ####
+
+dotnet_naming_rule.private_fields_underscore_camel.severity = warning
+dotnet_naming_rule.private_fields_underscore_camel.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore_camel.style = underscore_camel_case
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers =
+
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+
+# Constants stay PascalCase — see MaxOccurrencesPerTemplatePerRun in the worker.
+dotnet_naming_rule.constants_pascal.severity = warning
+dotnet_naming_rule.constants_pascal.symbols = constants
+dotnet_naming_rule.constants_pascal.style = pascal_case
+
+dotnet_naming_symbols.constants.applicable_kinds = field, local
+dotnet_naming_symbols.constants.required_modifiers = const
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+#### Language features already used throughout ####
+
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_accessors = true:suggestion
+
+csharp_style_pattern_matching_over_is_with_cast_check = true:warning
+csharp_style_pattern_matching_over_as_with_null_check = true:warning
+csharp_style_prefer_not_pattern = true:warning
+csharp_style_throw_expression = true:suggestion
+csharp_style_conditional_delegate_call = true:suggestion
+
+dotnet_style_null_propagation = true:warning
+dotnet_style_coalesce_expression = true:warning
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_prefer_conditional_expression_over_assignment = true:suggestion
+dotnet_style_readonly_field = true:suggestion
+
+# Unused usings and unreachable code. Kept visible because this repo has shipped both —
+# six unreachable ModelState checks sat in the controllers until they were noticed by hand.
+dotnet_diagnostic.IDE0005.severity = warning
+
+#### Braces and spacing ####
+
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_prefer_braces = when_multiline:suggestion
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_space_after_keywords_in_control_flow_statements = true
