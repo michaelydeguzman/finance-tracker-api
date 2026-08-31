@@ -28,9 +28,6 @@ public class TransactionsV1Controller : ControllerBase
     [HttpPost]
     public async Task<ActionResult<ApiResponseDto<TransactionResponseDto>>> AddTransaction([FromBody] CreateTransactionDto dto)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ApiResponseDto<TransactionResponseDto>.Fail("Invalid request payload."));
-
         var response = await _sender.Send(new CreateTransactionCommand(dto));
         return Created(string.Empty, ApiResponseDto<TransactionResponseDto>.Ok(response));
     }
@@ -38,9 +35,6 @@ public class TransactionsV1Controller : ControllerBase
     [HttpPut("{id}")]
     public async Task<ActionResult<ApiResponseDto<TransactionResponseDto>>> UpdateTransaction(Guid id, [FromBody] UpdateTransactionDto dto)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ApiResponseDto<TransactionResponseDto>.Fail("Invalid request payload."));
-
         var updated = await _sender.Send(new UpdateTransactionCommand(id, dto));
         if (updated is null)
             return NotFound(ApiResponseDto<TransactionResponseDto>.Fail("Transaction not found."));
