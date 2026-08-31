@@ -8,11 +8,18 @@ ASP.NET Core 8 REST API for personal finance tracking. Clean Architecture, EF Co
 | Project | Role |
 |---|---|
 | `FinanceTracker/` | API host — controllers, `Program.cs`. Assembly is `FinanceTracker.API`. |
-| `FinanceTracker.Domain/` | Entities and pure domain services. Depends on nothing else. |
+| `FinanceTracker.Domain/` | Entities, pure domain services, and the repository interfaces under `Repositories/`. Depends on nothing else. |
 | `FinanceTracker.Application/` | DTOs, MediatR commands/queries + handlers, service interfaces. |
-| `FinanceTracker.Infrastructure/` | `FinanceTrackerContext`, entity configurations, repositories, EF migrations. |
+| `FinanceTracker.Infrastructure/` | `FinanceTrackerContext`, entity configurations, repository implementations, EF migrations. |
 | `FinanceTracker.Worker/` | Run-and-exit console app that materializes recurring transactions. Triggered by Windows Task Scheduler. |
 | `FinanceTracker.Tests/` | xunit + FluentAssertions + Moq. Unit, integration, and worker tests. |
+
+Dependencies point inward. `Domain` references nothing; `Application` and `Infrastructure` are
+siblings that each reference only `Domain`; the API host references both and composes them.
+
+Application deliberately does **not** reference Infrastructure. It consumes the repository
+contracts from `Domain/Repositories/`, and `Program.cs` binds them to the EF implementations.
+Do not add that reference back — it is what put the persistence layer inside the inner one.
 
 Solution file: `FinanceTracker/FinanceTracker.API.sln`
 
@@ -87,7 +94,10 @@ tracking is required to advance `NextOccurrenceDate`.
 
 - One MediatR command/query plus its handler per folder under
   `Application/Features/<Area>/{Commands,Queries}/<Name>/`.
-- Responses use the `ApiResponseDto` envelope: `{ success, message, data }`.
+- Responses use the `ApiResponseDto` envelope: `{ success, message, data }`. Model validation
+  failures included — `InvalidModelStateResponseFactory` in `Program.cs` wraps them, since
+  `[ApiController]` rejects an invalid model before any action body runs. Do not add per-action
+  `ModelState.IsValid` checks; they are unreachable.
 - Controllers are versioned: `/api/v{version}/...`.
 - Transactions list pagination is 1-based, `pageSize` caps at 20, and paged responses carry
   `totalCount`. Calls without paging params must keep returning the full list.
