@@ -108,6 +108,27 @@ public class HouseholdRepository : IHouseholdRepository
     }
 
     /// <summary>
+    /// A name reduced to what the database would probably consider the same name.
+    ///
+    /// A backstop, not an authority — the database answers that question itself in
+    /// <see cref="ForkBorrowedCategoriesAsync"/>, and this covers only copies added but not
+    /// yet saved, which no query can see.
+    ///
+    /// It is not asked first because no rule written here can be more than an approximation
+    /// of a collation. This one folds trailing whitespace and case; a collation may also fold
+    /// accents, or expand a character into two, and which of those a given database does is a
+    /// deployment detail rather than something to encode in C#. Asking the database avoids the
+    /// question entirely: its comparison and its unique index use the same collation, so a
+    /// match it reports is exactly a duplicate the index would reject.
+    ///
+    /// Erring towards reuse is the safe direction: reusing where the database would have
+    /// allowed a separate row is invisible to the user, while missing a match inserts a
+    /// duplicate the unique index rejects — and that exception surfaces as a member being
+    /// unable to leave their household at all.
+    /// </summary>
+    private static string CollationKey(string name) => name.TrimEnd().ToUpperInvariant();
+
+    /// <summary>
     /// Gives this user their own copy of any category their records point at but somebody
     /// else owns, and re-points those records at the copy.
     ///
@@ -123,22 +144,6 @@ public class HouseholdRepository : IHouseholdRepository
     /// type is reused instead of duplicated — that is what the leaver would have created by
     /// hand, and a second copy would violate the unique index on (UserId, CategoryType, Name).
     /// </summary>
-    /// <summary>
-    /// A name reduced to what the database would probably consider the same name.
-    ///
-    /// A backstop, not an authority — the database answers that question itself in
-    /// <see cref="ForkBorrowedCategoriesAsync"/>. This covers only copies added but not yet
-    /// saved, which no query can see. It folds trailing whitespace and case because the
-    /// default SQL Server collation does; it does not model collation expansions such as
-    /// "ß" to "ss", which is exactly why it is not asked first.
-    ///
-    /// Erring towards reuse is the safe direction: reusing where the database would have
-    /// allowed a separate row is invisible to the user, while missing a match inserts a
-    /// duplicate the unique index rejects — and that exception surfaces as a member being
-    /// unable to leave their household at all.
-    /// </summary>
-    private static string CollationKey(string name) => name.TrimEnd().ToUpperInvariant();
-
     private async Task ForkBorrowedCategoriesAsync(Guid userId, CancellationToken cancellationToken)
     {
         var transactions = await _context.Transactions
@@ -174,12 +179,12 @@ public class HouseholdRepository : IHouseholdRepository
 
         foreach (var source in borrowed)
         {
-            // The database is asked first, and it is the authority: SQL Server compares with
-            // the same collation that enforces the unique index, so a row this finds is
-            // exactly a row the index would reject a duplicate of. Guessing at that collation
-            // in C# is wrong for every case where a collation expands rather than folds —
-            // "Straße" and "Strasse" compare equal under the default collation and unequal
-            // under any key we could write by hand.
+            // The database is asked first, and it is the authority: it compares with the same
+            // collation that enforces the unique index, so a row this finds is exactly a row
+            // the index would reject a duplicate of. Any rule written in C# is an
+            // approximation of that collation, and the cost of getting it wrong is not a
+            // cosmetic mismatch — it is an insert the index rejects, surfacing as a member
+            // unable to leave their household at all.
             var replacement = await _context.Categories
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(
