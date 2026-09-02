@@ -143,7 +143,11 @@ a row and its category can belong to different people, so both halves have to be
 - **Records that depend on other people's categories get a private copy.**
   `ForkBorrowedCategoriesAsync` runs before anything moves on the way out: it gives the
   leaver their own category with the same name and type — reusing one they already have
-  rather than tripping the unique index — and re-points their rows at it.
+  rather than tripping the unique index — and re-points their rows at it. That reuse check
+  goes through `CollationKey`, which must keep agreeing with how SQL Server compares the
+  `(UserId, CategoryType, Name)` index: a plain case-insensitive comparison says `"Snacks "`
+  and `"Snacks"` differ where the database says they do not, and the disagreement inserts a
+  duplicate the index rejects — leaving the member unable to leave the household at all.
 
 Fixing only the first half is not a fix. It protects the people staying and silently costs
 the person leaving their entire history under that category.

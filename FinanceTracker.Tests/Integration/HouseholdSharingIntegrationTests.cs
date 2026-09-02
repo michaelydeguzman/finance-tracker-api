@@ -657,6 +657,40 @@ public class HouseholdSharingIntegrationTests : IClassFixture<FinanceTrackerWebA
     }
 
     [Fact]
+    public async Task ForkingReusesACategoryTheDatabaseWouldCallADuplicate()
+    {
+        // The unique index on (UserId, CategoryType, Name) is enforced under SQL Server's
+        // collation, which ignores trailing whitespace. If the fork's own matching does not,
+        // it inserts a category the index then rejects, and the DbUpdateException leaves the
+        // member unable to leave the household at all.
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var stem = $"Snacks {Guid.NewGuid():N}";
+        await CreateCategoryAsync(alice.Client, $"{stem} ");
+
+        var bobsCategoryId = await CreateCategoryAsync(bob.Client, stem);
+        var label = await RecordSpendOnAsync(alice.Client, bobsCategoryId, $"Alice's snack {Guid.NewGuid():N}");
+
+        (await alice.Client.PostAsync("/api/v1/households/me/leave", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await _factory.SeedAsync(async context =>
+        {
+            var hers = await context.Categories
+                .IgnoreQueryFilters()
+                .Where(c => c.UserId == alice.UserId && c.Name.StartsWith(stem))
+                .ToListAsync();
+
+            hers.Should().ContainSingle("the fork must reuse her category, not add one the index rejects");
+        });
+
+        var expensesOnly = await (await alice.Client.GetAsync("/api/v1/transactions?categoryType=Expense"))
+            .Content.ReadAsStringAsync();
+
+        expensesOnly.Should().Contain(label);
+    }
+
+    [Fact]
     public async Task ATransactionCannotBeFiledUnderACategoryTheCallerCannotReach()
     {
         var mine = await NewPersonAsync();

@@ -158,11 +158,9 @@ public class HouseholdRepository : IHouseholdRepository
 
         foreach (var source in borrowed)
         {
-            // Case-insensitively, because SQL Server's default collation is, and the unique
-            // index would reject a copy differing only in case.
             var replacement = own.FirstOrDefault(c =>
                 c.CategoryType == source.CategoryType
-                && string.Equals(c.Name, source.Name, StringComparison.OrdinalIgnoreCase));
+                && CollationKey(c.Name) == CollationKey(source.Name));
 
             if (replacement is null)
             {
@@ -277,6 +275,28 @@ public class HouseholdRepository : IHouseholdRepository
     /// Nothing is lost by pinning. The owner keeps seeing their category through the
     /// ownership arm of the filter wherever they go.
     /// </summary>
+    /// <summary>
+    /// A name reduced to what the database would consider the same name.
+    ///
+    /// The unique index on (UserId, CategoryType, Name) is enforced by SQL Server under its
+    /// column collation, and this decides whether the fork above reuses a category or inserts
+    /// one. The two must agree: an ordinary case-insensitive comparison says "Snacks " and
+    /// "Snacks" differ, SQL Server says they do not, and the disagreement inserts a duplicate
+    /// that the index then rejects — turning a member's attempt to leave into an unhandled
+    /// <c>DbUpdateException</c> that leaves them stuck in the household until somebody renames
+    /// a category by hand.
+    ///
+    /// Trailing whitespace is ignored because SQL Server ignores it when comparing, and case
+    /// because the default collation is case-insensitive. Deliberately done here rather than
+    /// by letting the database evaluate the match: the tests run on the InMemory provider,
+    /// which applies .NET string equality and would silently not reproduce any of this.
+    ///
+    /// Not exhaustive — a collation treating accented and unaccented letters as equal would
+    /// still disagree with this. That is a far narrower case, and it fails the same safe way:
+    /// a duplicate insert, not a lost row.
+    /// </summary>
+    private static string CollationKey(string name) => name.TrimEnd().ToUpperInvariant();
+
     private async Task<HashSet<Guid>> CategoryIdsPinnedByOthersAsync(
         Guid userId,
         CancellationToken cancellationToken)
