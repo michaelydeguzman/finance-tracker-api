@@ -86,6 +86,32 @@ public sealed class FinanceTrackerWebApplicationFactory : WebApplicationFactory<
         return issuer.Issue(new User { Id = userId, Email = email, EmailVerifiedAt = DateTime.UtcNow }).Value;
     }
 
+    /// <summary>
+    /// Plants a real <c>User</c> row. Most tests need only a token, but anything touching
+    /// households needs the account behind it to exist: membership hangs off the user record,
+    /// and accepting an invitation checks the address has been confirmed.
+    /// </summary>
+    public async Task SeedUserAsync(Guid userId, string email, bool emailVerified = true)
+    {
+        await SeedAsync(async context =>
+        {
+            if (await context.Users.AnyAsync(u => u.Id == userId))
+                return;
+
+            context.Users.Add(new User
+            {
+                Id = userId,
+                Email = email,
+                EmailVerifiedAt = emailVerified ? DateTime.UtcNow : null,
+                DisplayName = email,
+                Status = UserStatus.Active,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await context.SaveChangesAsync();
+        });
+    }
+
     /// <summary>Seeds directly, bypassing the tenancy filter so a test can plant another tenant's data.</summary>
     public async Task SeedAsync(Func<FinanceTrackerContext, Task> seed)
     {

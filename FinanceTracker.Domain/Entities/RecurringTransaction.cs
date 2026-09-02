@@ -34,6 +34,14 @@ namespace FinanceTracker.Domain.Entities
         [Required]
         public required Guid UserId { get; set; }
 
+        /// <summary>
+        /// The household this record is shared with, or null when its owner was on their own
+        /// when it was written. Stamped from the writer's membership and rewritten in bulk
+        /// when they join or leave, so the tenancy filter can widen with one scalar compare
+        /// rather than a subquery over the membership table.
+        /// </summary>
+        public Guid? HouseholdId { get; set; }
+
         [Required]
         public required Guid FrequencyId { get; set; }
         public required Frequency Frequency { get; set; }

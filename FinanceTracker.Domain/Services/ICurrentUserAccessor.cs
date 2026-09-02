@@ -31,4 +31,18 @@ public interface ICurrentUserAccessor
     /// stamping an audit label costs no round trip. Null when there is no user context.
     /// </summary>
     string? Email => null;
+
+    /// <summary>
+    /// The household the signed-in user shares their finances with, or null when they are
+    /// on their own — which is also what the worker and any unauthenticated path report.
+    ///
+    /// Resolved per request from the database rather than from a token claim: a claim minted
+    /// at sign-in would still say "no household" for the life of the access token after
+    /// someone accepted an invitation, and they would sit looking at an empty shared view
+    /// with nothing to explain it.
+    ///
+    /// Defaulted here so an accessor that predates households — the worker's, the tests' —
+    /// keeps compiling and keeps meaning "no household".
+    /// </summary>
+    Guid? HouseholdId => null;
 }

@@ -1,0 +1,460 @@
+using System.Net;
+using System.Net.Http.Json;
+using FinanceTracker.Application.Dtos;
+using FinanceTracker.Application.Dtos.Households;
+using FinanceTracker.Domain.Entities;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+
+namespace FinanceTracker.Tests.Integration;
+
+/// <summary>
+/// The point of households, asserted end to end: two signed-in people who accept an
+/// invitation see one set of financial records, and everyone else still sees none of it.
+///
+/// Runs through the real pipeline for the same reason the tenancy tests do — the widened
+/// query filter, the per-request household lookup and the invitation rules only meet each
+/// other inside a request.
+/// </summary>
+public class HouseholdSharingIntegrationTests : IClassFixture<FinanceTrackerWebApplicationFactory>
+{
+    private readonly FinanceTrackerWebApplicationFactory _factory;
+
+    public HouseholdSharingIntegrationTests(FinanceTrackerWebApplicationFactory factory) => _factory = factory;
+
+    private sealed record ApiEnvelope<T>(bool Success, string? Message, T? Data);
+
+    private sealed record IdOnly(Guid Id);
+
+    private sealed record HouseholdShape(Guid Id, string Name, bool IsOwner, List<MemberShape> Members);
+
+    private sealed record MemberShape(Guid UserId, string Email, bool IsOwner, bool IsYou);
+
+    private sealed record InvitationShape(Guid Id, Guid HouseholdId, string HouseholdName, string Status);
+
+    /// <summary>A signed-in person with an account behind the token.</summary>
+    private async Task<(Guid UserId, string Email, HttpClient Client)> NewPersonAsync(bool emailVerified = true)
+    {
+        var userId = Guid.NewGuid();
+        var email = $"{userId:N}@example.com";
+
+        await _factory.SeedUserAsync(userId, email, emailVerified);
+
+        return (userId, email, _factory.CreateClientFor(userId, email));
+    }
+
+    private static async Task<T> ReadDataAsync<T>(HttpResponseMessage response)
+    {
+        var envelope = await response.Content.ReadFromJsonAsync<ApiEnvelope<T>>(HttpJsonOptions.ForApi);
+        return envelope!.Data!;
+    }
+
+    /// <summary>Creates a category and one transaction on it, and returns the transaction's name.</summary>
+    private static async Task<string> RecordSpendAsync(HttpClient client, string label)
+    {
+        var categoryResponse = await client.PostAsJsonAsync(
+            "/api/v1/categories",
+            new CreateCategoryDto { Name = $"{label} category", CategoryType = CategoryType.Expense },
+            HttpJsonOptions.ForApi);
+
+        categoryResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var categoryId = (await ReadDataAsync<IdOnly>(categoryResponse)).Id;
+
+        var transactionResponse = await client.PostAsJsonAsync(
+            "/api/v1/transactions",
+            new CreateTransactionDto
+            {
+                Name = label,
+                CategoryId = categoryId,
+                Amount = 42m,
+                TransactionDate = DateTime.UtcNow
+            },
+            HttpJsonOptions.ForApi);
+
+        transactionResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        return label;
+    }
+
+    private static async Task<HouseholdShape> CreateHouseholdAsync(HttpClient client, string name)
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/households", new CreateHouseholdDto { Name = name }, HttpJsonOptions.ForApi);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        return await ReadDataAsync<HouseholdShape>(response);
+    }
+
+    private static async Task<InvitationShape> InviteAsync(HttpClient owner, string email)
+    {
+        var response = await owner.PostAsJsonAsync(
+            "/api/v1/households/me/invitations",
+            new InviteHouseholdMemberDto { Email = email },
+            HttpJsonOptions.ForApi);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        return await ReadDataAsync<InvitationShape>(response);
+    }
+
+    /// <summary>Alice creates a household, invites Bob, Bob accepts.</summary>
+    private async Task<(
+        (Guid UserId, string Email, HttpClient Client) Alice,
+        (Guid UserId, string Email, HttpClient Client) Bob)> SharedHouseholdAsync()
+    {
+        var alice = await NewPersonAsync();
+        var bob = await NewPersonAsync();
+
+        await CreateHouseholdAsync(alice.Client, "The De Guzmans");
+        var invitation = await InviteAsync(alice.Client, bob.Email);
+
+        var accepted = await bob.Client.PostAsync($"/api/v1/households/invitations/{invitation.Id}/accept", null);
+        accepted.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        return (alice, bob);
+    }
+
+    [Fact]
+    public async Task AMemberSeesTransactionsEnteredByTheirHouseholdmate()
+    {
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var label = await RecordSpendAsync(alice.Client, $"Alice's shop {Guid.NewGuid():N}");
+
+        var response = await bob.Client.GetAsync("/api/v1/transactions");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        body.Should().Contain(label);
+    }
+
+    [Fact]
+    public async Task SharingRunsBothWays()
+    {
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var label = await RecordSpendAsync(bob.Client, $"Bob's shop {Guid.NewGuid():N}");
+
+        var body = await (await alice.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+
+        body.Should().Contain(label);
+    }
+
+    [Fact]
+    public async Task HistoryEnteredBeforeJoiningComesWithTheJoiner()
+    {
+        // Otherwise a household starts empty and only fills up going forward, which is not
+        // what "we share our finances" means to anyone.
+        var alice = await NewPersonAsync();
+        var bob = await NewPersonAsync();
+
+        var label = await RecordSpendAsync(bob.Client, $"Bob's history {Guid.NewGuid():N}");
+
+        await CreateHouseholdAsync(alice.Client, "Late joiners");
+        var invitation = await InviteAsync(alice.Client, bob.Email);
+        await bob.Client.PostAsync($"/api/v1/households/invitations/{invitation.Id}/accept", null);
+
+        var body = await (await alice.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+
+        body.Should().Contain(label);
+    }
+
+    [Fact]
+    public async Task CategoriesAreSharedToo()
+    {
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var name = $"Alice's category {Guid.NewGuid():N}";
+        var created = await alice.Client.PostAsJsonAsync(
+            "/api/v1/categories",
+            new CreateCategoryDto { Name = name, CategoryType = CategoryType.Expense },
+            HttpJsonOptions.ForApi);
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var body = await (await bob.Client.GetAsync("/api/v1/categories")).Content.ReadAsStringAsync();
+
+        body.Should().Contain(name);
+    }
+
+    [Fact]
+    public async Task SomeoneOutsideTheHouseholdStillSeesNothing()
+    {
+        var (alice, _) = await SharedHouseholdAsync();
+        var outsider = await NewPersonAsync();
+
+        var label = await RecordSpendAsync(alice.Client, $"Not yours {Guid.NewGuid():N}");
+
+        var body = await (await outsider.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+
+        body.Should().NotContain(label);
+    }
+
+    [Fact]
+    public async Task AnInvitationCannotBeAcceptedByAnyoneButItsRecipient()
+    {
+        // Answered as 404, not 403: confirming the id exists would confirm that the address
+        // it names has been approached.
+        var alice = await NewPersonAsync();
+        var bob = await NewPersonAsync();
+        var interloper = await NewPersonAsync();
+
+        await CreateHouseholdAsync(alice.Client, "Not for you");
+        var invitation = await InviteAsync(alice.Client, bob.Email);
+
+        var response = await interloper.Client.PostAsync(
+            $"/api/v1/households/invitations/{invitation.Id}/accept", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task AnUnverifiedAddressCannotJoin()
+    {
+        // Accepting publishes the joiner's whole history to the household. An address nobody
+        // has proved control of must not be able to do that.
+        var alice = await NewPersonAsync();
+        var unverified = await NewPersonAsync(emailVerified: false);
+
+        await CreateHouseholdAsync(alice.Client, "Verified only");
+        var invitation = await InviteAsync(alice.Client, unverified.Email);
+
+        var response = await unverified.Client.PostAsync(
+            $"/api/v1/households/invitations/{invitation.Id}/accept", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task OnlyTheOwnerMayInvite()
+    {
+        var (_, bob) = await SharedHouseholdAsync();
+
+        var response = await bob.Client.PostAsJsonAsync(
+            "/api/v1/households/me/invitations",
+            new InviteHouseholdMemberDto { Email = "someone-else@example.com" },
+            HttpJsonOptions.ForApi);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task InvitingTheSameAddressTwiceIsAConflict()
+    {
+        var alice = await NewPersonAsync();
+        var bob = await NewPersonAsync();
+
+        await CreateHouseholdAsync(alice.Client, "Twice invited");
+        await InviteAsync(alice.Client, bob.Email);
+
+        var response = await alice.Client.PostAsJsonAsync(
+            "/api/v1/households/me/invitations",
+            new InviteHouseholdMemberDto { Email = bob.Email },
+            HttpJsonOptions.ForApi);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task LeavingTakesYourRecordsWithYou()
+    {
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var label = await RecordSpendAsync(bob.Client, $"Bob's shop {Guid.NewGuid():N}");
+
+        var left = await bob.Client.PostAsync("/api/v1/households/me/leave", null);
+        left.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var aliceSees = await (await alice.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+        var bobSees = await (await bob.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+
+        aliceSees.Should().NotContain(label, "a former member's records are not the household's");
+        bobSees.Should().Contain(label, "they are still his");
+    }
+
+    [Fact]
+    public async Task RemovingAMemberEndsTheSharingInBothDirections()
+    {
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var aliceLabel = await RecordSpendAsync(alice.Client, $"Alice's shop {Guid.NewGuid():N}");
+        var bobLabel = await RecordSpendAsync(bob.Client, $"Bob's shop {Guid.NewGuid():N}");
+
+        var removed = await alice.Client.DeleteAsync($"/api/v1/households/me/members/{bob.UserId}");
+        removed.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var aliceSees = await (await alice.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+        var bobSees = await (await bob.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+
+        aliceSees.Should().NotContain(bobLabel);
+        bobSees.Should().NotContain(aliceLabel);
+        bobSees.Should().Contain(bobLabel);
+    }
+
+    [Fact]
+    public async Task AMemberCannotRemoveAnyone()
+    {
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var response = await bob.Client.DeleteAsync($"/api/v1/households/me/members/{alice.UserId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task BeingInAHouseholdIsExclusive()
+    {
+        var (_, bob) = await SharedHouseholdAsync();
+        var carol = await NewPersonAsync();
+
+        await CreateHouseholdAsync(carol.Client, "Somewhere else");
+        var invitation = await InviteAsync(carol.Client, bob.Email);
+
+        var response = await bob.Client.PostAsync($"/api/v1/households/invitations/{invitation.Id}/accept", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task TheInviteeSeesTheOfferOnTheirOwnPage()
+    {
+        var alice = await NewPersonAsync();
+        var bob = await NewPersonAsync();
+
+        await CreateHouseholdAsync(alice.Client, "Waiting on Bob");
+        await InviteAsync(alice.Client, bob.Email);
+
+        var invitations = await ReadDataAsync<List<InvitationShape>>(
+            await bob.Client.GetAsync("/api/v1/households/invitations"));
+
+        invitations.Should().ContainSingle().Which.HouseholdName.Should().Be("Waiting on Bob");
+    }
+
+    [Fact]
+    public async Task DecliningLeavesNothingShared()
+    {
+        var alice = await NewPersonAsync();
+        var bob = await NewPersonAsync();
+
+        await CreateHouseholdAsync(alice.Client, "Politely declined");
+        var invitation = await InviteAsync(alice.Client, bob.Email);
+
+        var declined = await bob.Client.PostAsync($"/api/v1/households/invitations/{invitation.Id}/decline", null);
+        declined.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var label = await RecordSpendAsync(alice.Client, $"Still private {Guid.NewGuid():N}");
+        var bobSees = await (await bob.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+
+        bobSees.Should().NotContain(label);
+    }
+
+    [Fact]
+    public async Task ARevokedInvitationCannotBeAccepted()
+    {
+        var alice = await NewPersonAsync();
+        var bob = await NewPersonAsync();
+
+        await CreateHouseholdAsync(alice.Client, "Changed my mind");
+        var invitation = await InviteAsync(alice.Client, bob.Email);
+
+        var revoked = await alice.Client.DeleteAsync($"/api/v1/households/me/invitations/{invitation.Id}");
+        revoked.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await bob.Client.PostAsync($"/api/v1/households/invitations/{invitation.Id}/accept", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task NotBeingInAHouseholdIsASuccessfulNullRatherThanA404()
+    {
+        var loner = await NewPersonAsync();
+
+        var response = await loner.Client.GetAsync("/api/v1/households/me");
+        var envelope = await response.Content.ReadFromJsonAsync<ApiEnvelope<HouseholdShape>>(HttpJsonOptions.ForApi);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        envelope!.Success.Should().BeTrue();
+        envelope.Data.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TheLastMemberOutClosesTheHousehold()
+    {
+        var alice = await NewPersonAsync();
+        var household = await CreateHouseholdAsync(alice.Client, "Briefly a household");
+
+        var left = await alice.Client.PostAsync("/api/v1/households/me/leave", null);
+        left.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await _factory.SeedAsync(async context =>
+        {
+            var stillThere = await context.Households.AnyAsync(h => h.Id == household.Id);
+            stillThere.Should().BeFalse();
+        });
+    }
+
+    [Fact]
+    public async Task AnOwnerWhoLeavesHandsOwnershipOn()
+    {
+        // Rather than trapping them: the only alternative way out of a household you own
+        // would be removing people whose records are not yours to decide about.
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var left = await alice.Client.PostAsync("/api/v1/households/me/leave", null);
+        left.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var household = await ReadDataAsync<HouseholdShape>(await bob.Client.GetAsync("/api/v1/households/me"));
+
+        household.IsOwner.Should().BeTrue();
+        household.Members.Should().ContainSingle().Which.UserId.Should().Be(bob.UserId);
+    }
+
+    [Fact]
+    public async Task GeneratedRecordsStayInsideTheHousehold()
+    {
+        // The worker has no request identity, so a generated row can only get its household
+        // from the template it came from.
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var frequencyId = Guid.NewGuid();
+        await _factory.SeedAsync(async context =>
+        {
+            context.Frequencies.Add(new Frequency
+            {
+                Id = frequencyId,
+                Name = $"Monthly {frequencyId:N}",
+                Type = FrequencyType.Monthly,
+                IntervalDays = 30,
+                IsActive = true
+            });
+
+            await context.SaveChangesAsync();
+        });
+
+        var categoryResponse = await alice.Client.PostAsJsonAsync(
+            "/api/v1/categories",
+            new CreateCategoryDto { Name = $"Bills {Guid.NewGuid():N}", CategoryType = CategoryType.Expense },
+            HttpJsonOptions.ForApi);
+        var categoryId = (await ReadDataAsync<IdOnly>(categoryResponse)).Id;
+
+        var templateName = $"Shared rent {Guid.NewGuid():N}";
+        var created = await alice.Client.PostAsJsonAsync(
+            "/api/v1/recurring-transactions",
+            new CreateRecurringTransactionDto
+            {
+                Name = templateName,
+                CategoryId = categoryId,
+                FrequencyId = frequencyId,
+                Amount = 1200m,
+                StartDate = DateTime.UtcNow.Date.AddDays(1)
+            },
+            HttpJsonOptions.ForApi);
+
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var bobSees = await (await bob.Client.GetAsync("/api/v1/recurring-transactions")).Content.ReadAsStringAsync();
+
+        bobSees.Should().Contain(templateName);
+    }
+}

@@ -41,9 +41,23 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
 
             // Tenant-leading composites replace the old single-column indexes: with a
             // UserId filter on every query, a bare TransactionDate index is unusable.
+
+            // Restrict here as well. A household is deleted only once it is empty, and a
+            // cascade would turn "the owner deleted the household" into "everyone's shared
+            // history disappeared".
+            builder.HasOne<Household>()
+                .WithMany()
+                .HasForeignKey(e => e.HouseholdId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             builder.HasIndex(e => new { e.UserId, e.TransactionDate });
             builder.HasIndex(e => new { e.UserId, e.CategoryId });
             builder.HasIndex(e => new { e.UserId, e.CreatedAt });
+
+            // Household-leading counterparts, for the same reason the tenant-leading ones
+            // exist: the shared view sorts and pages by date exactly as the private one does.
+            builder.HasIndex(e => new { e.HouseholdId, e.TransactionDate });
+            builder.HasIndex(e => new { e.HouseholdId, e.CreatedAt });
         }
     }
 }

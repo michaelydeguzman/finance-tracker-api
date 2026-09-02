@@ -18,7 +18,19 @@ public sealed class TestCurrentUserAccessor : ICurrentUserAccessor
 
     public TestCurrentUserAccessor(Guid? userId) => UserId = userId;
 
+    public TestCurrentUserAccessor(Guid? userId, Guid? householdId)
+    {
+        UserId = userId;
+        HouseholdId = householdId;
+    }
+
     public Guid? UserId { get; }
 
     public string? Email => UserId is null ? null : DefaultEmail;
+
+    /// <summary>
+    /// The household half of the tenancy filter. Null unless a test says otherwise, so every
+    /// existing test keeps meaning "this user, on their own".
+    /// </summary>
+    public Guid? HouseholdId { get; }
 }

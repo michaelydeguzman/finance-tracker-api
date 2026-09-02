@@ -26,6 +26,10 @@ public sealed class CreateTransactionCommandHandler : IRequestHandler<CreateTran
             CategoryId = request.Dto.CategoryId,
             Category = null!,
             UserId = _currentUser.RequireUserId(),
+            // Stamped from the writer's membership at the moment of writing, which is what
+            // makes the household half of the tenancy filter a scalar compare. Null when they
+            // are on their own, and the row stays private until they join.
+            HouseholdId = _currentUser.HouseholdId,
             Description = request.Dto.Description ?? string.Empty,
             Amount = request.Dto.Amount,
             TransactionDate = request.Dto.TransactionDate,

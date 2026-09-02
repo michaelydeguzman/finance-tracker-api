@@ -25,4 +25,12 @@ public sealed class AuthOptions
     public int PasswordResetMinutes { get; set; } = 60;
 
     public int MinimumPasswordLength { get; set; } = 12;
+
+    /// <summary>
+    /// How long a household invitation stays open. Lives in this section because it is the
+    /// same kind of setting as the ones above — the lifetime of an offer that grants access
+    /// to somebody's data — and days rather than minutes because, unlike a sign-in link, it
+    /// is waiting on a person who may not have an account yet.
+    /// </summary>
+    public int HouseholdInvitationDays { get; set; } = 14;
 }

@@ -112,6 +112,43 @@ Templates and instances are separate:
 The repository feeding the worker deliberately does **not** use `AsNoTracking()` — EF change
 tracking is required to advance `NextOccurrenceDate`.
 
+## Households
+
+A **household** is a group of users who share one set of financial records. It does not
+replace the user as the tenancy root — it is a second, wider scope on top of it.
+
+- `User.HouseholdId` is the membership, and it is at most one household per person.
+- `Category`, `Transaction` and `RecurringTransaction` each carry a nullable `HouseholdId`,
+  stamped from the writer's membership at write time (and copied onto worker-generated rows
+  from the template).
+- The query filters in `FinanceTrackerContext` therefore admit a row **two ways**:
+  `e.UserId == CurrentUserId || (CurrentHouseholdId != null && e.HouseholdId == CurrentHouseholdId)`.
+  Keep the explicit null guard — it is what states, rather than accidentally implies, that a
+  caller outside any household matches on ownership alone.
+- Joining or leaving re-stamps the member's own rows (`IHouseholdRepository.ReassignRecordsAsync`).
+  That is what keeps the filter a scalar compare instead of a subquery over the membership
+  table, and what lets someone leave with their history intact.
+
+`CurrentHouseholdId` comes from `ICurrentUserAccessor.HouseholdId`, which in the API host is
+whatever `HouseholdScopeMiddleware` resolved for the request — **not** a JWT claim. A claim
+minted at sign-in would keep saying "no household" for the life of the access token after
+someone accepted an invitation. The middleware sits between `UseAuthentication` and
+`UseAuthorization`: authentication is what puts a principal there to read, and the query
+filters consult the answer while EF is composing a query, far too late to go and fetch it.
+
+Membership changes only by **invitation** (`HouseholdInvitation`, addressed to an email).
+Never add a user to a household directly — joining publishes the joiner's own records to
+everyone already in it, so it has to be their answer about their own data. Accepting also
+requires a confirmed email address.
+
+Two consequences worth knowing:
+
+- Household members can edit and delete each other's records. That follows from the widened
+  filter and is deliberate; the repositories' 404-on-another-tenant behaviour is unchanged
+  for everyone outside the household.
+- Category uniqueness is still scoped to `(UserId, CategoryType, Name)`, so a household can
+  see two categories with the same name if two members each created one.
+
 ## Conventions
 
 - One MediatR command/query plus its handler per folder under
