@@ -66,4 +66,44 @@ public class CreateTransactionCommandHandlerTests
             It.IsAny<CancellationToken>()), Times.Once);
         service.Verify(s => s.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_StampsTheWritersHouseholdOntoTheTransaction(bool inAHousehold)
+    {
+        // Same reason as on the category: the stamp is the household half of the tenancy
+        // filter, and a transaction that misses it never reaches the shared list.
+        var household = inAHousehold ? Guid.NewGuid() : (Guid?)null;
+        var categoryId = Guid.NewGuid();
+
+        var dto = new CreateTransactionDto
+        {
+            Name = "Coffee",
+            CategoryId = categoryId,
+            Amount = 3.50m,
+            TransactionDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc)
+        };
+
+        Transaction? saved = null;
+        var service = new Mock<ITransactionService>();
+        service
+            .Setup(s => s.AddTransactionAsync(It.IsAny<Transaction>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Transaction t, CancellationToken _) =>
+            {
+                saved = t;
+                return t;
+            });
+        service
+            .Setup(s => s.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Transaction?)null);
+
+        var sut = new CreateTransactionCommandHandler(
+            service.Object,
+            new TestCurrentUserAccessor(TestCurrentUserAccessor.DefaultUserId, household));
+
+        await sut.Handle(new CreateTransactionCommand(dto), CancellationToken.None);
+
+        saved!.HouseholdId.Should().Be(household);
+    }
 }
