@@ -129,12 +129,14 @@ replace the user as the tenancy root — it is a second, wider scope on top of i
   (`DetachRecordsAsync`). That is what keeps the filter a scalar compare instead of a
   subquery over the membership table, and what lets someone leave with their history intact.
 
-**Leaving is not the mirror image of joining, and must not be made one.** A `Transaction`'s
-`Category` is a *required* navigation, so a category that left the household while another
-member's transaction still pointed at it would take that transaction out of *its own owner's*
-list — the query filter hides the principal and the required join drops the dependent.
-`DetachRecordsAsync` therefore leaves such categories stamped. Their owner still sees them
-through the ownership arm of the filter, so nothing is lost.
+**Categories somebody else's records depend on do not move — in either direction.** A
+`Transaction`'s `Category` is a *required* navigation, so moving a category out of the scope
+where another person's transaction can see it takes that transaction out of *its own owner's*
+list: the query filter hides the principal and the required join drops the dependent. Both
+`StampRecordsAsync` and `DetachRecordsAsync` therefore skip pinned categories — leaving a
+household must not strand the people still in it, and joining a new one must not drag a
+category out of the household still using it. Their owner keeps seeing them through the
+ownership arm of the filter, so nothing is lost.
 
 That in turn means a household can have rows pointing at it that belong to people who have
 left, and every tenancy FK is `Restrict`. `ClearHouseholdStampAsync` runs immediately before

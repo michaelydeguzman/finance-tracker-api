@@ -557,6 +557,28 @@ public class HouseholdSharingIntegrationTests : IClassFixture<FinanceTrackerWebA
     }
 
     [Fact]
+    public async Task JoiningANewHouseholdDoesNotDragACategoryOutOfTheOldOne()
+    {
+        // The pin has to hold in both directions. Bob's category is load-bearing for Alice's
+        // transaction; if Bob's next household re-stamped it, Alice would silently lose her
+        // own row — the same defect as a departure, arriving by the other door.
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var bobsCategoryId = await CreateCategoryAsync(bob.Client, $"Snacks {Guid.NewGuid():N}");
+        var label = await RecordSpendOnAsync(alice.Client, bobsCategoryId, $"Alice's snack {Guid.NewGuid():N}");
+
+        (await bob.Client.PostAsync("/api/v1/households/me/leave", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await CreateHouseholdAsync(bob.Client, $"Bob's new place {Guid.NewGuid():N}");
+
+        var expensesOnly = await (await alice.Client.GetAsync("/api/v1/transactions?categoryType=Expense"))
+            .Content.ReadAsStringAsync();
+
+        expensesOnly.Should().Contain(label, "Alice's own transaction must survive Bob moving on");
+    }
+
+    [Fact]
     public async Task AnUnconfirmedAddressCannotStartAHousehold()
     {
         // A household is the only thing here that mails a third party, and it puts a name its

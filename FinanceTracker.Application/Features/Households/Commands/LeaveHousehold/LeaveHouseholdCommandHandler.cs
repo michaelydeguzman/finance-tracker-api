@@ -33,7 +33,7 @@ public sealed class LeaveHouseholdCommandHandler
             return HouseholdResult<object>.NotFound("You are not in a household.");
 
         me.HouseholdId = null;
-        await _households.DetachRecordsAsync(userId, household.Id, cancellationToken);
+        await _households.DetachRecordsAsync(userId, cancellationToken);
 
         var remaining = members.Where(m => m.Id != userId).ToList();
 

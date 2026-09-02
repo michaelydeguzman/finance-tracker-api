@@ -50,7 +50,7 @@ public sealed class RemoveHouseholdMemberCommandHandler
 
         // Their records go back to being theirs alone. Leaving them stamped would keep the
         // household reading a former member's finances for as long as the rows existed.
-        await _households.DetachRecordsAsync(member.Id, household.Id, cancellationToken);
+        await _households.DetachRecordsAsync(member.Id, cancellationToken);
 
         await _households.SaveChangesAsync(cancellationToken);
 

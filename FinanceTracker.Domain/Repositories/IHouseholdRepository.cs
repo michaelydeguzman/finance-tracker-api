@@ -76,11 +76,14 @@ public interface IHouseholdRepository
     /// <c>Transaction</c>'s category is a *required* navigation, so a category that left
     /// while another member's transaction still pointed at it would take that transaction
     /// out of its own owner's list — the filter hides the principal and the required join
-    /// drops the dependent. Categories another member still references therefore stay with
-    /// the household. Nothing is lost by that: their owner keeps seeing them through the
+    /// drops the dependent. Categories somebody else's records depend on therefore stay
+    /// where they are. Nothing is lost by that: their owner keeps seeing them through the
     /// ownership arm of the filter, exactly as they would have.
+    ///
+    /// The same pin applies to <see cref="StampRecordsAsync"/>, and for the same reason:
+    /// joining a new household must not drag a category out of the one still using it.
     /// </summary>
-    Task DetachRecordsAsync(Guid userId, Guid householdId, CancellationToken cancellationToken = default);
+    Task DetachRecordsAsync(Guid userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Clears the household stamp from every record carrying it, whoever owns them.
