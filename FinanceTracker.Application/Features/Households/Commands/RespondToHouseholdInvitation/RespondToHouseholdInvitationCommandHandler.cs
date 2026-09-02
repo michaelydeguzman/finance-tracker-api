@@ -85,6 +85,14 @@ public sealed class RespondToHouseholdInvitationCommandHandler
 
         if (membersBefore.All(member => member.Id != invitation.InvitedByUserId))
         {
+            // Retired on the spot, not merely refused. It is dead either way, and leaving it
+            // Pending makes its own advice impossible to follow: HasOpenInvitationAsync would
+            // still see it, so the re-invitation this message asks for comes back as "that
+            // address already has an open invitation" with nothing to say why.
+            invitation.Status = HouseholdInvitationStatus.Revoked;
+            invitation.RespondedAt = now;
+            await _households.SaveChangesAsync(cancellationToken);
+
             return HouseholdResult<HouseholdResponseDto>.Conflict(
                 "The person who invited you has left that household. Ask someone still in it to invite you again.");
         }

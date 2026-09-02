@@ -691,6 +691,38 @@ public class HouseholdSharingIntegrationTests : IClassFixture<FinanceTrackerWebA
     }
 
     [Fact]
+    public async Task ARetiredInvitationDoesNotBlockTheReinvitationItAsksFor()
+    {
+        // Refusing an invitation whose sender has left tells the invitee to ask someone still
+        // in the household. That advice has to be followable: while the dead offer stays
+        // Pending, the new owner's invitation comes back as "that address already has an open
+        // invitation" with nothing to say why.
+        var alice = await NewPersonAsync();
+        var mallory = await NewPersonAsync();
+        var bob = await NewPersonAsync();
+
+        await CreateHouseholdAsync(alice.Client, $"Changing hands {Guid.NewGuid():N}");
+
+        var bobsInvitation = await InviteAsync(alice.Client, bob.Email);
+
+        var mallorysInvitation = await InviteAsync(alice.Client, mallory.Email);
+        (await mallory.Client.PostAsync($"/api/v1/households/invitations/{mallorysInvitation.Id}/accept", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await alice.Client.PostAsync("/api/v1/households/me/leave", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await bob.Client.PostAsync($"/api/v1/households/invitations/{bobsInvitation.Id}/accept", null))
+            .StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        // Mallory now owns the household and can invite Bob properly.
+        var fresh = await InviteAsync(mallory.Client, bob.Email);
+
+        (await bob.Client.PostAsync($"/api/v1/households/invitations/{fresh.Id}/accept", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task ATransactionCannotBeFiledUnderACategoryTheCallerCannotReach()
     {
         var mine = await NewPersonAsync();

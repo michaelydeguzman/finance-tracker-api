@@ -123,6 +123,22 @@ public class HouseholdRepository : IHouseholdRepository
     /// type is reused instead of duplicated — that is what the leaver would have created by
     /// hand, and a second copy would violate the unique index on (UserId, CategoryType, Name).
     /// </summary>
+    /// <summary>
+    /// A name reduced to what the database would probably consider the same name.
+    ///
+    /// A backstop, not an authority — the database answers that question itself in
+    /// <see cref="ForkBorrowedCategoriesAsync"/>. This covers only copies added but not yet
+    /// saved, which no query can see. It folds trailing whitespace and case because the
+    /// default SQL Server collation does; it does not model collation expansions such as
+    /// "ß" to "ss", which is exactly why it is not asked first.
+    ///
+    /// Erring towards reuse is the safe direction: reusing where the database would have
+    /// allowed a separate row is invisible to the user, while missing a match inserts a
+    /// duplicate the unique index rejects — and that exception surfaces as a member being
+    /// unable to leave their household at all.
+    /// </summary>
+    private static string CollationKey(string name) => name.TrimEnd().ToUpperInvariant();
+
     private async Task ForkBorrowedCategoriesAsync(Guid userId, CancellationToken cancellationToken)
     {
         var transactions = await _context.Transactions
@@ -158,7 +174,23 @@ public class HouseholdRepository : IHouseholdRepository
 
         foreach (var source in borrowed)
         {
-            var replacement = own.FirstOrDefault(c =>
+            // The database is asked first, and it is the authority: SQL Server compares with
+            // the same collation that enforces the unique index, so a row this finds is
+            // exactly a row the index would reject a duplicate of. Guessing at that collation
+            // in C# is wrong for every case where a collation expands rather than folds —
+            // "Straße" and "Strasse" compare equal under the default collation and unequal
+            // under any key we could write by hand.
+            var replacement = await _context.Categories
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(
+                    c => c.UserId == userId
+                      && c.CategoryType == source.CategoryType
+                      && c.Name == source.Name,
+                    cancellationToken);
+
+            // Then the local set, which that query cannot see: copies added earlier in this
+            // same loop are not saved yet.
+            replacement ??= own.FirstOrDefault(c =>
                 c.CategoryType == source.CategoryType
                 && CollationKey(c.Name) == CollationKey(source.Name));
 
@@ -275,28 +307,6 @@ public class HouseholdRepository : IHouseholdRepository
     /// Nothing is lost by pinning. The owner keeps seeing their category through the
     /// ownership arm of the filter wherever they go.
     /// </summary>
-    /// <summary>
-    /// A name reduced to what the database would consider the same name.
-    ///
-    /// The unique index on (UserId, CategoryType, Name) is enforced by SQL Server under its
-    /// column collation, and this decides whether the fork above reuses a category or inserts
-    /// one. The two must agree: an ordinary case-insensitive comparison says "Snacks " and
-    /// "Snacks" differ, SQL Server says they do not, and the disagreement inserts a duplicate
-    /// that the index then rejects — turning a member's attempt to leave into an unhandled
-    /// <c>DbUpdateException</c> that leaves them stuck in the household until somebody renames
-    /// a category by hand.
-    ///
-    /// Trailing whitespace is ignored because SQL Server ignores it when comparing, and case
-    /// because the default collation is case-insensitive. Deliberately done here rather than
-    /// by letting the database evaluate the match: the tests run on the InMemory provider,
-    /// which applies .NET string equality and would silently not reproduce any of this.
-    ///
-    /// Not exhaustive — a collation treating accented and unaccented letters as equal would
-    /// still disagree with this. That is a far narrower case, and it fails the same safe way:
-    /// a duplicate insert, not a lost row.
-    /// </summary>
-    private static string CollationKey(string name) => name.TrimEnd().ToUpperInvariant();
-
     private async Task<HashSet<Guid>> CategoryIdsPinnedByOthersAsync(
         Guid userId,
         CancellationToken cancellationToken)
