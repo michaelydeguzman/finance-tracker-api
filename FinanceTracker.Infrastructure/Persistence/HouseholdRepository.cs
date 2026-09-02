@@ -97,8 +97,97 @@ public class HouseholdRepository : IHouseholdRepository
         CancellationToken cancellationToken = default) =>
         MoveRecordsAsync(userId, householdId, cancellationToken);
 
-    public Task DetachRecordsAsync(Guid userId, CancellationToken cancellationToken = default) =>
-        MoveRecordsAsync(userId, null, cancellationToken);
+    public async Task DetachRecordsAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        // Before anything moves. Once this has run, nothing this user owns depends on a
+        // category anybody else owns, so moving their rows out cannot separate a transaction
+        // from its category.
+        await ForkBorrowedCategoriesAsync(userId, cancellationToken);
+
+        await MoveRecordsAsync(userId, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Gives this user their own copy of any category their records point at but somebody
+    /// else owns, and re-points those records at the copy.
+    ///
+    /// This is the other half of the required-navigation problem, and the half that costs the
+    /// *leaver* rather than the people staying. While sharing, anyone may file a transaction
+    /// under any category in the household. On the way out those categories stay behind with
+    /// their owner — so without this, a leaver's own transactions point at a category they can
+    /// no longer see, the required join drops them, and they disappear from their owner's own
+    /// list, totals and exports with no way to reach them through the API at all.
+    ///
+    /// A copy rather than a move: the category still belongs to the person who made it, and
+    /// the household still needs it. An existing category of the user's with the same name and
+    /// type is reused instead of duplicated — that is what the leaver would have created by
+    /// hand, and a second copy would violate the unique index on (UserId, CategoryType, Name).
+    /// </summary>
+    private async Task ForkBorrowedCategoriesAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var transactions = await _context.Transactions
+            .IgnoreQueryFilters()
+            .Where(t => t.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        var templates = await _context.RecurringTransactions
+            .IgnoreQueryFilters()
+            .Where(r => r.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        var referenced = transactions.Select(t => t.CategoryId)
+            .Concat(templates.Select(r => r.CategoryId))
+            .Distinct()
+            .ToList();
+
+        if (referenced.Count == 0)
+            return;
+
+        var borrowed = await _context.Categories
+            .IgnoreQueryFilters()
+            .Where(c => c.UserId != userId && referenced.Contains(c.Id))
+            .ToListAsync(cancellationToken);
+
+        if (borrowed.Count == 0)
+            return;
+
+        var own = await _context.Categories
+            .IgnoreQueryFilters()
+            .Where(c => c.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var source in borrowed)
+        {
+            // Case-insensitively, because SQL Server's default collation is, and the unique
+            // index would reject a copy differing only in case.
+            var replacement = own.FirstOrDefault(c =>
+                c.CategoryType == source.CategoryType
+                && string.Equals(c.Name, source.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (replacement is null)
+            {
+                replacement = new Category
+                {
+                    Id = Guid.NewGuid(),
+                    Name = source.Name,
+                    CategoryType = source.CategoryType,
+                    UserId = userId,
+                    HouseholdId = null,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = source.IsActive
+                };
+
+                await _context.Categories.AddAsync(replacement, cancellationToken);
+                own.Add(replacement);
+            }
+
+            foreach (var transaction in transactions.Where(t => t.CategoryId == source.Id))
+                transaction.CategoryId = replacement.Id;
+
+            foreach (var template in templates.Where(r => r.CategoryId == source.Id))
+                template.CategoryId = replacement.Id;
+        }
+    }
 
     /// <summary>
     /// Moves one person's records into a household, or out of whatever they are in.

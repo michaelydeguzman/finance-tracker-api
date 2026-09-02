@@ -3,6 +3,7 @@ using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Features.Transactions.Commands.CreateTransaction;
 using FinanceTracker.Application.Services;
 using FinanceTracker.Domain.Entities;
+using FinanceTracker.Domain.Repositories;
 using FluentAssertions;
 using Moq;
 
@@ -10,6 +11,17 @@ namespace FinanceTracker.Tests.Unit.Handlers;
 
 public class CreateTransactionCommandHandlerTests
 {
+    /// <summary>A category repository that resolves any id to <paramref name="category"/>.</summary>
+    private static ICategoryRepository CategoriesReturning(Category? category)
+    {
+        var categories = new Mock<ICategoryRepository>();
+        categories
+            .Setup(c => c.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(category);
+
+        return categories.Object;
+    }
+
     [Fact]
     public async Task Handle_AddsTransactionAndMapsResponse()
     {
@@ -53,7 +65,8 @@ public class CreateTransactionCommandHandlerTests
                 CreatedBy = TestCurrentUserAccessor.DefaultEmail
             });
 
-        var sut = new CreateTransactionCommandHandler(service.Object, new TestCurrentUserAccessor());
+        var sut = new CreateTransactionCommandHandler(
+            service.Object, CategoriesReturning(category), new TestCurrentUserAccessor());
 
         var result = await sut.Handle(new CreateTransactionCommand(dto), CancellationToken.None);
 
@@ -100,10 +113,44 @@ public class CreateTransactionCommandHandlerTests
 
         var sut = new CreateTransactionCommandHandler(
             service.Object,
+            CategoriesReturning(new Category
+            {
+                Id = categoryId,
+                Name = "Food",
+                CategoryType = CategoryType.Expense,
+                UserId = TestCurrentUserAccessor.DefaultUserId
+            }),
             new TestCurrentUserAccessor(TestCurrentUserAccessor.DefaultUserId, household));
 
         await sut.Handle(new CreateTransactionCommand(dto), CancellationToken.None);
 
         saved!.HouseholdId.Should().Be(household);
+    }
+
+    [Fact]
+    public async Task Handle_RefusesACategoryTheCallerCannotReach()
+    {
+        // The lookup is tenancy-scoped, so an unreachable id simply is not found. Writing the
+        // row anyway would produce a transaction nobody can read: its Category navigation is
+        // required, and the filter hides the category from every member.
+        var service = new Mock<ITransactionService>(MockBehavior.Strict);
+
+        var sut = new CreateTransactionCommandHandler(
+            service.Object, CategoriesReturning(null), new TestCurrentUserAccessor());
+
+        var result = await sut.Handle(
+            new CreateTransactionCommand(new CreateTransactionDto
+            {
+                Name = "Coffee",
+                CategoryId = Guid.NewGuid(),
+                Amount = 3.50m,
+                TransactionDate = DateTime.UtcNow
+            }),
+            CancellationToken.None);
+
+        result.Should().BeNull();
+        service.Verify(
+            s => s.AddTransactionAsync(It.IsAny<Transaction>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

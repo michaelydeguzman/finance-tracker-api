@@ -579,6 +579,106 @@ public class HouseholdSharingIntegrationTests : IClassFixture<FinanceTrackerWebA
     }
 
     [Fact]
+    public async Task ALeaverKeepsTransactionsFiledUnderSomebodyElsesCategory()
+    {
+        // The half of the required-navigation problem that costs the person leaving. Alice's
+        // rows point at Bob's category; on the way out that category stays with Bob, so
+        // without forking her a copy the required join drops every one of them and they
+        // vanish from her own list, her totals and her exports — unreachable through the API
+        // entirely, since fetching one by id Includes the category too.
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var bobsCategoryId = await CreateCategoryAsync(bob.Client, $"Groceries {Guid.NewGuid():N}");
+        var label = await RecordSpendOnAsync(alice.Client, bobsCategoryId, $"Alice's shop {Guid.NewGuid():N}");
+
+        (await alice.Client.PostAsync("/api/v1/households/me/leave", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var unfiltered = await (await alice.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+        var expensesOnly = await (await alice.Client.GetAsync("/api/v1/transactions?categoryType=Expense"))
+            .Content.ReadAsStringAsync();
+
+        unfiltered.Should().Contain(label, "they are Alice's own transactions");
+        expensesOnly.Should().Contain(label, "and the category filter must not drop them either");
+    }
+
+    [Fact]
+    public async Task ALeaverKeepsControlOfATemplateFiledUnderSomebodyElsesCategory()
+    {
+        // Same mechanism on RecurringTransaction, where the consequence is worse: the worker
+        // sweeps with IgnoreQueryFilters, so a template its owner can no longer see keeps
+        // generating real money every month with no way to pause, cancel or delete it.
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var frequencyId = Guid.NewGuid();
+        await _factory.SeedAsync(async context =>
+        {
+            context.Frequencies.Add(new Frequency
+            {
+                Id = frequencyId,
+                Name = $"Monthly {frequencyId:N}",
+                Type = FrequencyType.Monthly,
+                IntervalDays = 30,
+                IsActive = true
+            });
+
+            await context.SaveChangesAsync();
+        });
+
+        var bobsCategoryId = await CreateCategoryAsync(bob.Client, $"Rent {Guid.NewGuid():N}");
+
+        var templateName = $"Alice's rent {Guid.NewGuid():N}";
+        var created = await alice.Client.PostAsJsonAsync(
+            "/api/v1/recurring-transactions",
+            new CreateRecurringTransactionDto
+            {
+                Name = templateName,
+                CategoryId = bobsCategoryId,
+                FrequencyId = frequencyId,
+                Amount = 1200m,
+                StartDate = DateTime.UtcNow.Date.AddDays(1)
+            },
+            HttpJsonOptions.ForApi);
+
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+        var templateId = (await ReadDataAsync<IdOnly>(created)).Id;
+
+        (await alice.Client.PostAsync("/api/v1/households/me/leave", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var listed = await (await alice.Client.GetAsync("/api/v1/recurring-transactions"))
+            .Content.ReadAsStringAsync();
+
+        listed.Should().Contain(templateName);
+
+        var paused = await alice.Client.PostAsync($"/api/v1/recurring-transactions/{templateId}/pause", null);
+
+        paused.StatusCode.Should().Be(HttpStatusCode.OK, "an unstoppable template is money leaving an account");
+    }
+
+    [Fact]
+    public async Task ATransactionCannotBeFiledUnderACategoryTheCallerCannotReach()
+    {
+        var mine = await NewPersonAsync();
+        var stranger = await NewPersonAsync();
+
+        var strangersCategoryId = await CreateCategoryAsync(stranger.Client, $"Theirs {Guid.NewGuid():N}");
+
+        var response = await mine.Client.PostAsJsonAsync(
+            "/api/v1/transactions",
+            new CreateTransactionDto
+            {
+                Name = "Not allowed",
+                CategoryId = strangersCategoryId,
+                Amount = 1m,
+                TransactionDate = DateTime.UtcNow
+            },
+            HttpJsonOptions.ForApi);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task AnUnconfirmedAddressCannotStartAHousehold()
     {
         // A household is the only thing here that mails a third party, and it puts a name its

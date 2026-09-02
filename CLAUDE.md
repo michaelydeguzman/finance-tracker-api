@@ -129,14 +129,24 @@ replace the user as the tenancy root — it is a second, wider scope on top of i
   (`DetachRecordsAsync`). That is what keeps the filter a scalar compare instead of a
   subquery over the membership table, and what lets someone leave with their history intact.
 
-**Categories somebody else's records depend on do not move — in either direction.** A
-`Transaction`'s `Category` is a *required* navigation, so moving a category out of the scope
-where another person's transaction can see it takes that transaction out of *its own owner's*
-list: the query filter hides the principal and the required join drops the dependent. Both
-`StampRecordsAsync` and `DetachRecordsAsync` therefore skip pinned categories — leaving a
-household must not strand the people still in it, and joining a new one must not drag a
-category out of the household still using it. Their owner keeps seeing them through the
-ownership arm of the filter, so nothing is lost.
+**The required-navigation trap, which has two halves.** `Transaction.Category` and
+`RecurringTransaction.Category` are *required* navigations to a filtered entity. If a
+category stops being visible to someone, the required join silently drops every row of
+theirs that points at it — out of their list, their totals and their exports, and out of
+`GetByIdAsync` too, so there is no way to reach it through the API at all. Under sharing,
+a row and its category can belong to different people, so both halves have to be handled:
+
+- **Categories other people's records depend on do not move**, in either direction.
+  `StampRecordsAsync` and `DetachRecordsAsync` both skip them. Leaving a household must not
+  strand the people still in it, and joining a new one must not drag a category out of the
+  household still using it.
+- **Records that depend on other people's categories get a private copy.**
+  `ForkBorrowedCategoriesAsync` runs before anything moves on the way out: it gives the
+  leaver their own category with the same name and type — reusing one they already have
+  rather than tripping the unique index — and re-points their rows at it.
+
+Fixing only the first half is not a fix. It protects the people staying and silently costs
+the person leaving their entire history under that category.
 
 That in turn means a household can have rows pointing at it that belong to people who have
 left, and every tenancy FK is `Restrict`. `ClearHouseholdStampAsync` runs immediately before
@@ -188,6 +198,10 @@ Two consequences worth knowing:
 - Controllers are versioned: `/api/v{version}/...`.
 - Transactions list pagination is 1-based, `pageSize` caps at 20, and paged responses carry
   `totalCount`. Calls without paging params must keep returning the full list.
+- **A transaction's `CategoryId` is validated through the tenancy-scoped repository** on
+  create and update, the way the recurring handlers already did it. That lookup doubles as
+  the reachability check: accepting any id the foreign key allows would write a row whose
+  required category nobody can see, which is invisible to every member and uncorrectable.
 - Every repository and service method that does I/O takes a trailing
   `CancellationToken cancellationToken = default` and forwards it to the EF call. MediatR
   handlers pass the token they are given; a handler that drops it leaves queries running
