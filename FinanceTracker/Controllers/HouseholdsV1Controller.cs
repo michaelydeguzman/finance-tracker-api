@@ -12,8 +12,10 @@ using FinanceTracker.Application.Features.Households.Commands.RevokeHouseholdInv
 using FinanceTracker.Application.Features.Households.Queries.GetMyHousehold;
 using FinanceTracker.Application.Features.Households.Queries.GetMyInvitations;
 using MediatR;
+using FinanceTracker.API.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace FinanceTracker.API.Controllers
 {
@@ -88,7 +90,14 @@ namespace FinanceTracker.API.Controllers
                 : Failure(result);
         }
 
+        /// <summary>
+        /// Rate limited, alone among the household endpoints, because it is the only one that
+        /// sends mail to an address the caller names — with a household name the caller also
+        /// chose appearing in the subject line. Every other mailing endpoint in the app
+        /// carries the same policy; this one is a spam relay without it.
+        /// </summary>
         [HttpPost("me/invitations")]
+        [EnableRateLimiting(RateLimitPolicies.HouseholdInvitations)]
         public async Task<ActionResult<ApiResponseDto<HouseholdInvitationDto>>> Invite(
             [FromBody] InviteHouseholdMemberDto dto)
         {

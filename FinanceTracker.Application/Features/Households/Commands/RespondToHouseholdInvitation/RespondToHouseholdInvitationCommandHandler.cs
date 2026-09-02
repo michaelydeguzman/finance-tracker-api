@@ -76,6 +76,19 @@ public sealed class RespondToHouseholdInvitationCommandHandler
         if (household is null)
             return HouseholdResult<HouseholdResponseDto>.NotFound("That household no longer exists.");
 
+        // An invitation is an offer from a person, not a standing property of the household.
+        // Without this, an offer outlives its author: A invites B, A leaves, ownership passes
+        // to C, and B's acceptance days later publishes B's entire history to C — someone B
+        // has never heard of, on the strength of an offer from someone who has gone. The
+        // invitation DTO only ever showed B the household's name, so nothing warned them.
+        var membersBefore = await _households.GetMembersAsync(household.Id, cancellationToken);
+
+        if (membersBefore.All(member => member.Id != invitation.InvitedByUserId))
+        {
+            return HouseholdResult<HouseholdResponseDto>.Conflict(
+                "The person who invited you has left that household. Ask someone still in it to invite you again.");
+        }
+
         user.HouseholdId = household.Id;
         invitation.Status = HouseholdInvitationStatus.Accepted;
         invitation.RespondedAt = now;
@@ -83,7 +96,7 @@ public sealed class RespondToHouseholdInvitationCommandHandler
         // The joiner's existing records join with them. Without this the household would see
         // only what each member entered after joining, which is not what "we share our
         // finances" means to anyone.
-        await _households.ReassignRecordsAsync(userId, household.Id, cancellationToken);
+        await _households.StampRecordsAsync(userId, household.Id, cancellationToken);
 
         await _households.SaveChangesAsync(cancellationToken);
 

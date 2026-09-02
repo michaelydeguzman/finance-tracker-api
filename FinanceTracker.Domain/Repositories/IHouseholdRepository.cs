@@ -54,19 +54,44 @@ public interface IHouseholdRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Re-stamps every financial record owned by <paramref name="userId"/> with
-    /// <paramref name="householdId"/>, or clears it when that is null.
+    /// Stamps every financial record owned by <paramref name="userId"/> with
+    /// <paramref name="householdId"/>. The joining direction.
     ///
     /// This is what makes the widened query filter a scalar compare instead of a subquery
-    /// over the membership table, and it is why leaving a household is not lossy: the rows
-    /// go back to being visible to their owner alone rather than staying behind with a group
-    /// that person has left.
+    /// over the membership table, and it is what brings a joiner's existing history into the
+    /// household rather than starting them from empty.
     ///
     /// Deliberately loads and mutates tracked entities rather than issuing a set-based
     /// update. A personal-finance history is small, and the tests run on the InMemory
     /// provider, which has no <c>ExecuteUpdate</c>.
     /// </summary>
-    Task ReassignRecordsAsync(Guid userId, Guid? householdId, CancellationToken cancellationToken = default);
+    Task StampRecordsAsync(Guid userId, Guid householdId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Takes <paramref name="userId"/>'s records back out of <paramref name="householdId"/>.
+    /// The leaving direction, and deliberately not a mirror image of
+    /// <see cref="StampRecordsAsync"/>.
+    ///
+    /// Transactions and templates leave with their owner. Categories may not: a
+    /// <c>Transaction</c>'s category is a *required* navigation, so a category that left
+    /// while another member's transaction still pointed at it would take that transaction
+    /// out of its own owner's list — the filter hides the principal and the required join
+    /// drops the dependent. Categories another member still references therefore stay with
+    /// the household. Nothing is lost by that: their owner keeps seeing them through the
+    /// ownership arm of the filter, exactly as they would have.
+    /// </summary>
+    Task DetachRecordsAsync(Guid userId, Guid householdId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Clears the household stamp from every record carrying it, whoever owns them.
+    ///
+    /// Called immediately before deleting a household. Every tenancy FK is <c>Restrict</c>,
+    /// so a single row left pointing at it — a category kept behind by
+    /// <see cref="DetachRecordsAsync"/>, or one stamped by a write that raced a removal —
+    /// turns the delete into a <c>DbUpdateException</c> and leaves the household
+    /// permanently uncloseable.
+    /// </summary>
+    Task ClearHouseholdStampAsync(Guid householdId, CancellationToken cancellationToken = default);
 
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }

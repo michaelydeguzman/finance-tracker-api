@@ -91,18 +91,14 @@ public class HouseholdRepository : IHouseholdRepository
                   && i.ExpiresAt > asOf,
                 cancellationToken);
 
-    public async Task ReassignRecordsAsync(
+    public async Task StampRecordsAsync(
         Guid userId,
-        Guid? householdId,
+        Guid householdId,
         CancellationToken cancellationToken = default)
     {
-        // IgnoreQueryFilters throughout. The caller is mid-transition — either not yet in the
-        // household whose id is being written, or no longer in the one being cleared — so the
-        // filter would hide the very rows this exists to move.
-        //
-        // Owner alone, with no "and the household differs" narrowing: comparing a column
-        // against a null parameter is where null semantics get subtle, and EF marks an
-        // unchanged assignment as clean anyway, so the narrowing would buy nothing.
+        // IgnoreQueryFilters throughout. The caller is mid-transition — not yet in the
+        // household whose id is being written — so the filter would hide the very rows this
+        // exists to move.
         var categories = await _context.Categories
             .IgnoreQueryFilters()
             .Where(c => c.UserId == userId)
@@ -126,6 +122,105 @@ public class HouseholdRepository : IHouseholdRepository
 
         foreach (var template in templates)
             template.HouseholdId = householdId;
+    }
+
+    public async Task DetachRecordsAsync(
+        Guid userId,
+        Guid householdId,
+        CancellationToken cancellationToken = default)
+    {
+        var transactions = await _context.Transactions
+            .IgnoreQueryFilters()
+            .Where(t => t.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var transaction in transactions)
+            transaction.HouseholdId = null;
+
+        var templates = await _context.RecurringTransactions
+            .IgnoreQueryFilters()
+            .Where(r => r.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var template in templates)
+            template.HouseholdId = null;
+
+        // Read before the categories, and from the database rather than the change tracker,
+        // so it reflects what other members still hold. The rows nulled above are excluded
+        // by owner anyway.
+        var stillInUse = await CategoryIdsUsedByOthersAsync(householdId, userId, cancellationToken);
+
+        var categories = await _context.Categories
+            .IgnoreQueryFilters()
+            .Where(c => c.UserId == userId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var category in categories)
+        {
+            // A category another member's record points at stays with the household. See
+            // IHouseholdRepository.DetachRecordsAsync for why leaving would hide that
+            // member's own transaction from them.
+            if (!stillInUse.Contains(category.Id))
+                category.HouseholdId = null;
+        }
+    }
+
+    public async Task ClearHouseholdStampAsync(
+        Guid householdId,
+        CancellationToken cancellationToken = default)
+    {
+        var categories = await _context.Categories
+            .IgnoreQueryFilters()
+            .Where(c => c.HouseholdId == householdId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var category in categories)
+            category.HouseholdId = null;
+
+        var transactions = await _context.Transactions
+            .IgnoreQueryFilters()
+            .Where(t => t.HouseholdId == householdId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var transaction in transactions)
+            transaction.HouseholdId = null;
+
+        var templates = await _context.RecurringTransactions
+            .IgnoreQueryFilters()
+            .Where(r => r.HouseholdId == householdId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var template in templates)
+            template.HouseholdId = null;
+    }
+
+    /// <summary>
+    /// Categories that records belonging to somebody other than
+    /// <paramref name="excludingUserId"/> still point at, within this household.
+    ///
+    /// Two queries rather than one <c>Union</c>: the InMemory provider the tests run on is
+    /// the weakest link in the translation chain, and this costs nothing at these volumes.
+    /// </summary>
+    private async Task<HashSet<Guid>> CategoryIdsUsedByOthersAsync(
+        Guid householdId,
+        Guid excludingUserId,
+        CancellationToken cancellationToken)
+    {
+        var fromTransactions = await _context.Transactions
+            .IgnoreQueryFilters()
+            .Where(t => t.HouseholdId == householdId && t.UserId != excludingUserId)
+            .Select(t => t.CategoryId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var fromTemplates = await _context.RecurringTransactions
+            .IgnoreQueryFilters()
+            .Where(r => r.HouseholdId == householdId && r.UserId != excludingUserId)
+            .Select(r => r.CategoryId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return fromTransactions.Concat(fromTemplates).ToHashSet();
     }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>

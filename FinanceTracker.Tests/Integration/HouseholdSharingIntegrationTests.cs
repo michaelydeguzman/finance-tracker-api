@@ -49,18 +49,21 @@ public class HouseholdSharingIntegrationTests : IClassFixture<FinanceTrackerWebA
         return envelope!.Data!;
     }
 
-    /// <summary>Creates a category and one transaction on it, and returns the transaction's name.</summary>
-    private static async Task<string> RecordSpendAsync(HttpClient client, string label)
+    private static async Task<Guid> CreateCategoryAsync(HttpClient client, string name)
     {
-        var categoryResponse = await client.PostAsJsonAsync(
+        var response = await client.PostAsJsonAsync(
             "/api/v1/categories",
-            new CreateCategoryDto { Name = $"{label} category", CategoryType = CategoryType.Expense },
+            new CreateCategoryDto { Name = name, CategoryType = CategoryType.Expense },
             HttpJsonOptions.ForApi);
 
-        categoryResponse.StatusCode.Should().Be(HttpStatusCode.Created);
-        var categoryId = (await ReadDataAsync<IdOnly>(categoryResponse)).Id;
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var transactionResponse = await client.PostAsJsonAsync(
+        return (await ReadDataAsync<IdOnly>(response)).Id;
+    }
+
+    private static async Task<string> RecordSpendOnAsync(HttpClient client, Guid categoryId, string label)
+    {
+        var response = await client.PostAsJsonAsync(
             "/api/v1/transactions",
             new CreateTransactionDto
             {
@@ -71,9 +74,17 @@ public class HouseholdSharingIntegrationTests : IClassFixture<FinanceTrackerWebA
             },
             HttpJsonOptions.ForApi);
 
-        transactionResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         return label;
+    }
+
+    /// <summary>Creates a category and one transaction on it, both owned by the same person.</summary>
+    private static async Task<string> RecordSpendAsync(HttpClient client, string label)
+    {
+        var categoryId = await CreateCategoryAsync(client, $"{label} category");
+
+        return await RecordSpendOnAsync(client, categoryId, label);
     }
 
     private static async Task<HouseholdShape> CreateHouseholdAsync(HttpClient client, string name)
@@ -456,5 +467,108 @@ public class HouseholdSharingIntegrationTests : IClassFixture<FinanceTrackerWebA
         var bobSees = await (await bob.Client.GetAsync("/api/v1/recurring-transactions")).Content.ReadAsStringAsync();
 
         bobSees.Should().Contain(templateName);
+    }
+
+    [Fact]
+    public async Task ATransactionSurvivesTheDepartureOfWhoeverOwnedItsCategory()
+    {
+        // A Transaction's Category is a *required* navigation. If the category leaves the
+        // household while the transaction stays, the filter hides the principal and the
+        // required join drops the dependent — so Bob loses his own transaction because
+        // Alice left. The category is held back for exactly this reason.
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var sharedCategoryId = await CreateCategoryAsync(alice.Client, $"Groceries {Guid.NewGuid():N}");
+        var label = await RecordSpendOnAsync(bob.Client, sharedCategoryId, $"Bob's milk {Guid.NewGuid():N}");
+
+        (await alice.Client.PostAsync("/api/v1/households/me/leave", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var unfiltered = await (await bob.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+        var expensesOnly = await (await bob.Client.GetAsync("/api/v1/transactions?categoryType=Expense"))
+            .Content.ReadAsStringAsync();
+
+        unfiltered.Should().Contain(label, "it is Bob's own transaction");
+        expensesOnly.Should().Contain(label, "the category filter must not drop it either");
+    }
+
+    [Fact]
+    public async Task AHouseholdStillClosesWhenACategoryWasHeldBackForSomeoneElse()
+    {
+        // The held-back category above still points at the household, and every tenancy FK
+        // is Restrict. Without clearing the stamp first, the last member's departure throws
+        // DbUpdateException and the household can never be closed.
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var sharedCategoryId = await CreateCategoryAsync(alice.Client, $"Bills {Guid.NewGuid():N}");
+        await RecordSpendOnAsync(bob.Client, sharedCategoryId, $"Bob's bill {Guid.NewGuid():N}");
+
+        var household = await ReadDataAsync<HouseholdShape>(
+            await alice.Client.GetAsync("/api/v1/households/me"));
+
+        (await alice.Client.PostAsync("/api/v1/households/me/leave", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await bob.Client.PostAsync("/api/v1/households/me/leave", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await _factory.SeedAsync(async context =>
+        {
+            (await context.Households.AnyAsync(h => h.Id == household.Id)).Should().BeFalse();
+
+            var stranded = await context.Categories
+                .IgnoreQueryFilters()
+                .AnyAsync(c => c.HouseholdId == household.Id);
+
+            stranded.Should().BeFalse("nothing may still point at a deleted household");
+        });
+    }
+
+    [Fact]
+    public async Task AnInvitationDiesWithTheMembershipOfWhoeverSentIt()
+    {
+        // Otherwise an offer outlives its author: Alice invites Bob, Alice leaves, ownership
+        // passes to Mallory, and Bob's acceptance days later publishes his whole history to
+        // Mallory — someone Bob has never heard of. The invitation only ever showed Bob a
+        // household name, so nothing warned him.
+        var alice = await NewPersonAsync();
+        var mallory = await NewPersonAsync();
+        var bob = await NewPersonAsync();
+
+        await CreateHouseholdAsync(alice.Client, "Changing hands");
+
+        var bobsInvitation = await InviteAsync(alice.Client, bob.Email);
+
+        var mallorysInvitation = await InviteAsync(alice.Client, mallory.Email);
+        (await mallory.Client.PostAsync($"/api/v1/households/invitations/{mallorysInvitation.Id}/accept", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await alice.Client.PostAsync("/api/v1/households/me/leave", null))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await bob.Client.PostAsync(
+            $"/api/v1/households/invitations/{bobsInvitation.Id}/accept", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var label = await RecordSpendAsync(bob.Client, $"Bob's private {Guid.NewGuid():N}");
+        var mallorySees = await (await mallory.Client.GetAsync("/api/v1/transactions")).Content.ReadAsStringAsync();
+
+        mallorySees.Should().NotContain(label);
+    }
+
+    [Fact]
+    public async Task AnUnconfirmedAddressCannotStartAHousehold()
+    {
+        // A household is the only thing here that mails a third party, and it puts a name its
+        // creator chose in the subject line. An account that has not proved its own address
+        // must not be able to reach anyone else's.
+        var unverified = await NewPersonAsync(emailVerified: false);
+
+        var response = await unverified.Client.PostAsJsonAsync(
+            "/api/v1/households",
+            new CreateHouseholdDto { Name = "Unproven" },
+            HttpJsonOptions.ForApi);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }

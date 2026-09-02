@@ -57,6 +57,12 @@ public sealed class InviteHouseholdMemberCommandHandler
         if (inviter is null)
             return HouseholdResult<HouseholdInvitationDto>.NotFound("Your account could not be found.");
 
+        if (inviter.EmailVerifiedAt is null)
+        {
+            return HouseholdResult<HouseholdInvitationDto>.Invalid(
+                "Confirm your email address before inviting anyone.");
+        }
+
         if (invitedEmail == inviter.Email)
             return HouseholdResult<HouseholdInvitationDto>.Conflict("You are already in this household.");
 

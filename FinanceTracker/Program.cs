@@ -128,6 +128,20 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+
+    // Resolved per request rather than captured once, so the configured ceiling is read from
+    // whatever configuration the host actually ended up with — the same reason the JWT
+    // options above are bound through IOptions instead of read inline at startup.
+    options.AddPolicy(RateLimitPolicies.HouseholdInvitations, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = context.RequestServices
+                    .GetRequiredService<IOptions<AuthOptions>>().Value.HouseholdInvitesPerMinute,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
 });
 // ----------------------------------------------------------------------------------
 

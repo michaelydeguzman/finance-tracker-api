@@ -46,6 +46,11 @@ public sealed class FinanceTrackerWebApplicationFactory : WebApplicationFactory<
                 [$"{JwtOptions.SectionName}:{nameof(JwtOptions.Audience)}"] = Audience,
                 [$"{AuthOptions.SectionName}:{nameof(AuthOptions.BffSharedSecret)}"] = "integration-bff-secret",
 
+                // The suite issues far more invitations in a few seconds than any household
+                // ever would, from a single client address. Raised so the household tests
+                // exercise household rules rather than the rate limiter.
+                [$"{AuthOptions.SectionName}:{nameof(AuthOptions.HouseholdInvitesPerMinute)}"] = "1000",
+
                 // Never a real provider from a test run.
                 [$"{EmailOptions.SectionName}:{nameof(EmailOptions.Provider)}"] = nameof(EmailProvider.Logging)
             });

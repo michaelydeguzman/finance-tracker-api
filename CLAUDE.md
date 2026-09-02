@@ -125,9 +125,21 @@ replace the user as the tenancy root — it is a second, wider scope on top of i
   `e.UserId == CurrentUserId || (CurrentHouseholdId != null && e.HouseholdId == CurrentHouseholdId)`.
   Keep the explicit null guard — it is what states, rather than accidentally implies, that a
   caller outside any household matches on ownership alone.
-- Joining or leaving re-stamps the member's own rows (`IHouseholdRepository.ReassignRecordsAsync`).
-  That is what keeps the filter a scalar compare instead of a subquery over the membership
-  table, and what lets someone leave with their history intact.
+- Joining stamps the member's own rows (`StampRecordsAsync`); leaving clears them
+  (`DetachRecordsAsync`). That is what keeps the filter a scalar compare instead of a
+  subquery over the membership table, and what lets someone leave with their history intact.
+
+**Leaving is not the mirror image of joining, and must not be made one.** A `Transaction`'s
+`Category` is a *required* navigation, so a category that left the household while another
+member's transaction still pointed at it would take that transaction out of *its own owner's*
+list — the query filter hides the principal and the required join drops the dependent.
+`DetachRecordsAsync` therefore leaves such categories stamped. Their owner still sees them
+through the ownership arm of the filter, so nothing is lost.
+
+That in turn means a household can have rows pointing at it that belong to people who have
+left, and every tenancy FK is `Restrict`. `ClearHouseholdStampAsync` runs immediately before
+a household is deleted for exactly that reason — without it the last member's departure
+throws `DbUpdateException` and the household can never be closed.
 
 `CurrentHouseholdId` comes from `ICurrentUserAccessor.HouseholdId`, which in the API host is
 whatever `HouseholdScopeMiddleware` resolved for the request — **not** a JWT claim. A claim
@@ -138,8 +150,22 @@ filters consult the answer while EF is composing a query, far too late to go and
 
 Membership changes only by **invitation** (`HouseholdInvitation`, addressed to an email).
 Never add a user to a household directly — joining publishes the joiner's own records to
-everyone already in it, so it has to be their answer about their own data. Accepting also
-requires a confirmed email address.
+everyone already in it, so it has to be their answer about their own data.
+
+Three rules guard that consent, all load-bearing:
+
+- **A confirmed email address** is required to accept an invitation, and to create a
+  household or invite anyone. Inviting a typo'd address would otherwise hand a stranger's
+  records to whoever registers it next.
+- **An invitation dies with its sender's membership.** Accept re-checks that
+  `InvitedByUserId` is still in the household. An offer is from a person, not a standing
+  property of the group: without this, A invites B, A leaves, ownership passes to C, and B's
+  acceptance days later publishes B's history to someone B has never heard of.
+- **Invitations are rate limited** (`RateLimitPolicies.HouseholdInvitations`, ceiling in
+  `AuthOptions.HouseholdInvitesPerMinute`). It is the only endpoint outside auth that mails
+  an address the caller names, with a household name the caller also chose in the subject
+  line — an open relay without a ceiling. The integration suite raises the limit rather than
+  being throttled by a rule it is not testing.
 
 Two consequences worth knowing:
 

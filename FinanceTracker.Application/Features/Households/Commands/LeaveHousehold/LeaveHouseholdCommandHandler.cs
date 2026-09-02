@@ -33,7 +33,7 @@ public sealed class LeaveHouseholdCommandHandler
             return HouseholdResult<object>.NotFound("You are not in a household.");
 
         me.HouseholdId = null;
-        await _households.ReassignRecordsAsync(userId, null, cancellationToken);
+        await _households.DetachRecordsAsync(userId, household.Id, cancellationToken);
 
         var remaining = members.Where(m => m.Id != userId).ToList();
 
@@ -42,6 +42,11 @@ public sealed class LeaveHouseholdCommandHandler
             // The last person out closes it. Leaving an empty household behind would leave a
             // row nobody can reach, still holding open invitations people could accept into
             // a group with no members.
+            // Every tenancy FK is Restrict, so one row still pointing at this household —
+            // a category held back by DetachRecordsAsync, or one stamped by a write that
+            // raced somebody's removal — would turn the delete into a DbUpdateException and
+            // leave the household permanently uncloseable.
+            await _households.ClearHouseholdStampAsync(household.Id, cancellationToken);
             await _households.RemoveAsync(household, cancellationToken);
             await _households.SaveChangesAsync(cancellationToken);
 

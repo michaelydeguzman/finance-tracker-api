@@ -38,6 +38,15 @@ public sealed class CreateHouseholdCommandHandler
         if (user is null)
             return HouseholdResult<HouseholdResponseDto>.NotFound("Your account could not be found.");
 
+        if (user.EmailVerifiedAt is null)
+        {
+            // A household is the only thing in this app that can send mail to a third party,
+            // and it names itself in the subject line. An account that has not proved its own
+            // address must not be able to reach anyone else's.
+            return HouseholdResult<HouseholdResponseDto>.Invalid(
+                "Confirm your email address before creating a household.");
+        }
+
         if (user.HouseholdId is not null)
         {
             return HouseholdResult<HouseholdResponseDto>.Conflict(
@@ -60,7 +69,7 @@ public sealed class CreateHouseholdCommandHandler
 
         // Everything they have entered so far comes with them, so the household starts with
         // the founder's history rather than looking empty until the next transaction.
-        await _households.ReassignRecordsAsync(userId, household.Id, cancellationToken);
+        await _households.StampRecordsAsync(userId, household.Id, cancellationToken);
 
         await _households.SaveChangesAsync(cancellationToken);
 
