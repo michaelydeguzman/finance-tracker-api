@@ -20,10 +20,12 @@ namespace FinanceTracker.API.Authentication
     public sealed class HttpContextCurrentUserAccessor : ICurrentUserAccessor
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly HouseholdScope _householdScope;
 
-        public HttpContextCurrentUserAccessor(IHttpContextAccessor httpContextAccessor)
+        public HttpContextCurrentUserAccessor(IHttpContextAccessor httpContextAccessor, HouseholdScope householdScope)
         {
             _httpContextAccessor = httpContextAccessor;
+            _householdScope = householdScope;
         }
 
         public Guid? UserId
@@ -49,5 +51,12 @@ namespace FinanceTracker.API.Authentication
                 return string.IsNullOrWhiteSpace(email) ? null : email;
             }
         }
+
+        /// <summary>
+        /// Whatever <see cref="HouseholdScopeMiddleware"/> resolved for this request. A plain
+        /// read: the query filters consult this while EF is composing a query, so it must not
+        /// be the thing that goes to the database.
+        /// </summary>
+        public Guid? HouseholdId => _householdScope.HouseholdId;
     }
 }

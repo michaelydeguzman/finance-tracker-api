@@ -46,6 +46,11 @@ public sealed class FinanceTrackerWebApplicationFactory : WebApplicationFactory<
                 [$"{JwtOptions.SectionName}:{nameof(JwtOptions.Audience)}"] = Audience,
                 [$"{AuthOptions.SectionName}:{nameof(AuthOptions.BffSharedSecret)}"] = "integration-bff-secret",
 
+                // The suite issues far more invitations in a few seconds than any household
+                // ever would, from a single client address. Raised so the household tests
+                // exercise household rules rather than the rate limiter.
+                [$"{AuthOptions.SectionName}:{nameof(AuthOptions.HouseholdInvitesPerMinute)}"] = "1000",
+
                 // Never a real provider from a test run.
                 [$"{EmailOptions.SectionName}:{nameof(EmailOptions.Provider)}"] = nameof(EmailProvider.Logging)
             });
@@ -84,6 +89,32 @@ public sealed class FinanceTrackerWebApplicationFactory : WebApplicationFactory<
         }));
 
         return issuer.Issue(new User { Id = userId, Email = email, EmailVerifiedAt = DateTime.UtcNow }).Value;
+    }
+
+    /// <summary>
+    /// Plants a real <c>User</c> row. Most tests need only a token, but anything touching
+    /// households needs the account behind it to exist: membership hangs off the user record,
+    /// and accepting an invitation checks the address has been confirmed.
+    /// </summary>
+    public async Task SeedUserAsync(Guid userId, string email, bool emailVerified = true)
+    {
+        await SeedAsync(async context =>
+        {
+            if (await context.Users.AnyAsync(u => u.Id == userId))
+                return;
+
+            context.Users.Add(new User
+            {
+                Id = userId,
+                Email = email,
+                EmailVerifiedAt = emailVerified ? DateTime.UtcNow : null,
+                DisplayName = email,
+                Status = UserStatus.Active,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await context.SaveChangesAsync();
+        });
     }
 
     /// <summary>Seeds directly, bypassing the tenancy filter so a test can plant another tenant's data.</summary>

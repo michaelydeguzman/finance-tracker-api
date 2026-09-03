@@ -29,6 +29,17 @@ namespace FinanceTracker.Infrastructure.Persistence
         /// </summary>
         public Guid? CurrentUserId => _currentUser?.UserId;
 
+        /// <summary>
+        /// The household the caller shares records with, or null. Read by the tenancy filters
+        /// alongside <see cref="CurrentUserId"/>, and an instance member for the same reason:
+        /// EF must re-evaluate it per query rather than bake one household into the model.
+        ///
+        /// Null is the safe value here too. Every comparison against it is guarded by an
+        /// explicit null check, so a caller with no household matches on ownership alone
+        /// and a row with no household is never shared by accident.
+        /// </summary>
+        public Guid? CurrentHouseholdId => _currentUser?.HouseholdId;
+
         public DbSet<Category> Categories { get; set; }
         public DbSet<Frequency> Frequencies { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
@@ -37,6 +48,8 @@ namespace FinanceTracker.Infrastructure.Persistence
         public DbSet<UserIdentity> UserIdentities { get; set; }
         public DbSet<UserCredential> UserCredentials { get; set; }
         public DbSet<UserToken> UserTokens { get; set; }
+        public DbSet<Household> Households { get; set; }
+        public DbSet<HouseholdInvitation> HouseholdInvitations { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -49,10 +62,25 @@ namespace FinanceTracker.Infrastructure.Persistence
             // Where() would leak another person's finances, so the filter is applied at the
             // model where it cannot be omitted by accident.
             //
+            // Two ways in, not one: a record is visible to the person who owns it, and to
+            // anyone in the household it was stamped with. The household half is guarded by
+            // an explicit null check on *the caller's* household, because a null never equals
+            // a null in SQL — without the guard a caller outside any household would still
+            // read as "no match", but the intent would rest on that accident rather than on
+            // the code saying so.
+            //
             // Frequency is reference data shared by everyone and is deliberately not scoped.
-            modelBuilder.Entity<Category>().HasQueryFilter(e => e.UserId == CurrentUserId);
-            modelBuilder.Entity<Transaction>().HasQueryFilter(e => e.UserId == CurrentUserId);
-            modelBuilder.Entity<RecurringTransaction>().HasQueryFilter(e => e.UserId == CurrentUserId);
+            modelBuilder.Entity<Category>().HasQueryFilter(e =>
+                e.UserId == CurrentUserId
+                || (CurrentHouseholdId != null && e.HouseholdId == CurrentHouseholdId));
+
+            modelBuilder.Entity<Transaction>().HasQueryFilter(e =>
+                e.UserId == CurrentUserId
+                || (CurrentHouseholdId != null && e.HouseholdId == CurrentHouseholdId));
+
+            modelBuilder.Entity<RecurringTransaction>().HasQueryFilter(e =>
+                e.UserId == CurrentUserId
+                || (CurrentHouseholdId != null && e.HouseholdId == CurrentHouseholdId));
         }
     }
 }

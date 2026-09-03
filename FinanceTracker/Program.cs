@@ -24,6 +24,10 @@ builder.Services.AddDbContext<FinanceTrackerContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("FinanceTrackerDB")));
 
 builder.Services.AddHttpContextAccessor();
+
+// Populated by UseHouseholdScope() below and read by the accessor. Scoped, because it holds
+// one request's answer; a singleton here would serve one caller's household to every other.
+builder.Services.AddScoped<HouseholdScope>();
 builder.Services.AddScoped<ICurrentUserAccessor, HttpContextCurrentUserAccessor>();
 
 // --- Auth configuration -----------------------------------------------------------
@@ -124,6 +128,20 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+
+    // Resolved per request rather than captured once, so the configured ceiling is read from
+    // whatever configuration the host actually ended up with — the same reason the JWT
+    // options above are bound through IOptions instead of read inline at startup.
+    options.AddPolicy(RateLimitPolicies.HouseholdInvitations, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = context.RequestServices
+                    .GetRequiredService<IOptions<AuthOptions>>().Value.HouseholdInvitesPerMinute,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
 });
 // ----------------------------------------------------------------------------------
 
@@ -134,6 +152,7 @@ builder.Services.AddScoped<IFrequencyService, FrequencyService>();
 builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
 builder.Services.AddScoped<ITransactionService, TransactionService>();
 builder.Services.AddScoped<IRecurringTransactionRepository, RecurringTransactionRepository>();
+builder.Services.AddScoped<IHouseholdRepository, HouseholdRepository>();
 
 // Add services to the container.
 
@@ -207,6 +226,13 @@ app.UseRateLimiter();
 // Authentication must run before authorization — without it the pipeline authorizes an
 // anonymous principal and every [Authorize] check has nothing to check.
 app.UseAuthentication();
+
+// Between the two on purpose. Authentication is what puts a principal on the context for
+// this to read, and every tenancy-scoped query downstream of authorization needs the answer
+// already in hand — the query filters consult it while EF composes a query, far too late to
+// go and fetch it.
+app.UseHouseholdScope();
+
 app.UseAuthorization();
 
 app.MapControllers();

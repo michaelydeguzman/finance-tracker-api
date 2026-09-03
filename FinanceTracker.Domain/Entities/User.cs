@@ -43,6 +43,15 @@ namespace FinanceTracker.Domain.Entities
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// The household this person shares their finances with, or null when they are on
+        /// their own. At most one: a record carries a single <c>HouseholdId</c>, so a user
+        /// in two households would have to choose which one each new row belonged to.
+        /// </summary>
+        public Guid? HouseholdId { get; set; }
+
+        public Household? Household { get; set; }
+
         public ICollection<UserIdentity> Identities { get; set; } = new List<UserIdentity>();
 
         public UserCredential? Credential { get; set; }

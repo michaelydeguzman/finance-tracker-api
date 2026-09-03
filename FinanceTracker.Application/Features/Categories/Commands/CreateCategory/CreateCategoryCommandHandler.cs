@@ -25,6 +25,10 @@ public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategor
             Name = request.Dto.Name,
             CategoryType = request.Dto.CategoryType,
             UserId = _currentUser.RequireUserId(),
+            // Stamped from the writer's membership at the moment of writing, which is what
+            // makes the household half of the tenancy filter a scalar compare. Null when they
+            // are on their own, and the row stays private until they join.
+            HouseholdId = _currentUser.HouseholdId,
             CreatedAt = DateTime.UtcNow,
             IsActive = true
         };

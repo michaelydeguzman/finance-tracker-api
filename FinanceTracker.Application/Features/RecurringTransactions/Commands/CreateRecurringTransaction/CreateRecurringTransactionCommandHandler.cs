@@ -85,6 +85,10 @@ public sealed class CreateRecurringTransactionCommandHandler
             CategoryId = dto.CategoryId,
             Category = null!,
             UserId = _currentUser.RequireUserId(),
+            // Stamped from the writer's membership at the moment of writing, which is what
+            // makes the household half of the tenancy filter a scalar compare. Null when they
+            // are on their own, and the row stays private until they join.
+            HouseholdId = _currentUser.HouseholdId,
             FrequencyId = dto.FrequencyId,
             Frequency = null!,
             StartDate = dto.StartDate,

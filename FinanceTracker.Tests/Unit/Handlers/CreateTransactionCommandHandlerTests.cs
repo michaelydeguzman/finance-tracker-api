@@ -3,6 +3,7 @@ using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Features.Transactions.Commands.CreateTransaction;
 using FinanceTracker.Application.Services;
 using FinanceTracker.Domain.Entities;
+using FinanceTracker.Domain.Repositories;
 using FluentAssertions;
 using Moq;
 
@@ -10,6 +11,17 @@ namespace FinanceTracker.Tests.Unit.Handlers;
 
 public class CreateTransactionCommandHandlerTests
 {
+    /// <summary>A category repository that resolves any id to <paramref name="category"/>.</summary>
+    private static ICategoryRepository CategoriesReturning(Category? category)
+    {
+        var categories = new Mock<ICategoryRepository>();
+        categories
+            .Setup(c => c.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(category);
+
+        return categories.Object;
+    }
+
     [Fact]
     public async Task Handle_AddsTransactionAndMapsResponse()
     {
@@ -53,7 +65,8 @@ public class CreateTransactionCommandHandlerTests
                 CreatedBy = TestCurrentUserAccessor.DefaultEmail
             });
 
-        var sut = new CreateTransactionCommandHandler(service.Object, new TestCurrentUserAccessor());
+        var sut = new CreateTransactionCommandHandler(
+            service.Object, CategoriesReturning(category), new TestCurrentUserAccessor());
 
         var result = await sut.Handle(new CreateTransactionCommand(dto), CancellationToken.None);
 
@@ -65,5 +78,79 @@ public class CreateTransactionCommandHandlerTests
             t.Name == dto.Name && t.CategoryId == categoryId && t.CreatedBy == TestCurrentUserAccessor.DefaultEmail),
             It.IsAny<CancellationToken>()), Times.Once);
         service.Verify(s => s.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_StampsTheWritersHouseholdOntoTheTransaction(bool inAHousehold)
+    {
+        // Same reason as on the category: the stamp is the household half of the tenancy
+        // filter, and a transaction that misses it never reaches the shared list.
+        var household = inAHousehold ? Guid.NewGuid() : (Guid?)null;
+        var categoryId = Guid.NewGuid();
+
+        var dto = new CreateTransactionDto
+        {
+            Name = "Coffee",
+            CategoryId = categoryId,
+            Amount = 3.50m,
+            TransactionDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc)
+        };
+
+        Transaction? saved = null;
+        var service = new Mock<ITransactionService>();
+        service
+            .Setup(s => s.AddTransactionAsync(It.IsAny<Transaction>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Transaction t, CancellationToken _) =>
+            {
+                saved = t;
+                return t;
+            });
+        service
+            .Setup(s => s.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Transaction?)null);
+
+        var sut = new CreateTransactionCommandHandler(
+            service.Object,
+            CategoriesReturning(new Category
+            {
+                Id = categoryId,
+                Name = "Food",
+                CategoryType = CategoryType.Expense,
+                UserId = TestCurrentUserAccessor.DefaultUserId
+            }),
+            new TestCurrentUserAccessor(TestCurrentUserAccessor.DefaultUserId, household));
+
+        await sut.Handle(new CreateTransactionCommand(dto), CancellationToken.None);
+
+        saved!.HouseholdId.Should().Be(household);
+    }
+
+    [Fact]
+    public async Task Handle_RefusesACategoryTheCallerCannotReach()
+    {
+        // The lookup is tenancy-scoped, so an unreachable id simply is not found. Writing the
+        // row anyway would produce a transaction nobody can read: its Category navigation is
+        // required, and the filter hides the category from every member.
+        var service = new Mock<ITransactionService>(MockBehavior.Strict);
+
+        var sut = new CreateTransactionCommandHandler(
+            service.Object, CategoriesReturning(null), new TestCurrentUserAccessor());
+
+        var result = await sut.Handle(
+            new CreateTransactionCommand(new CreateTransactionDto
+            {
+                Name = "Coffee",
+                CategoryId = Guid.NewGuid(),
+                Amount = 3.50m,
+                TransactionDate = DateTime.UtcNow
+            }),
+            CancellationToken.None);
+
+        result.Should().BeNull();
+        service.Verify(
+            s => s.AddTransactionAsync(It.IsAny<Transaction>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

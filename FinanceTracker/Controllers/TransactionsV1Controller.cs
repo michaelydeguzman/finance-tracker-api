@@ -29,6 +29,12 @@ public class TransactionsV1Controller : ControllerBase
     public async Task<ActionResult<ApiResponseDto<TransactionResponseDto>>> AddTransaction([FromBody] CreateTransactionDto dto)
     {
         var response = await _sender.Send(new CreateTransactionCommand(dto));
+
+        // Matches the recurring endpoint's answer for the same cause: the category is the
+        // caller's to name, and naming one they cannot reach is a bad request, not a 500.
+        if (response is null)
+            return BadRequest(ApiResponseDto<TransactionResponseDto>.Fail("Category not found."));
+
         return Created(string.Empty, ApiResponseDto<TransactionResponseDto>.Ok(response));
     }
 

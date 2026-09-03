@@ -25,4 +25,20 @@ public sealed class AuthOptions
     public int PasswordResetMinutes { get; set; } = 60;
 
     public int MinimumPasswordLength { get; set; } = 12;
+
+    /// <summary>
+    /// How long a household invitation stays open. Lives in this section because it is the
+    /// same kind of setting as the ones above — the lifetime of an offer that grants access
+    /// to somebody's data — and days rather than minutes because, unlike a sign-in link, it
+    /// is waiting on a person who may not have an account yet.
+    /// </summary>
+    public int HouseholdInvitationDays { get; set; } = 14;
+
+    /// <summary>
+    /// Household invitations allowed per client address per minute. Ten is far above what a
+    /// real household needs and far below what makes the endpoint useful as a mail relay.
+    /// Configurable so the integration suite, which shares one address across every test,
+    /// can raise it rather than being throttled by a rule it is not testing.
+    /// </summary>
+    public int HouseholdInvitesPerMinute { get; set; } = 10;
 }

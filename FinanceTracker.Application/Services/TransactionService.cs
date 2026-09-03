@@ -47,6 +47,16 @@ public class TransactionService : ITransactionService
 
     public async Task<Transaction?> UpdateTransactionAsync(Guid id, UpdateTransactionDto dto, CancellationToken cancellationToken = default)
     {
+        // The category lookup is tenancy-scoped, so this doubles as the reachability check —
+        // the same thing the recurring handlers already do. Without it any GUID satisfying
+        // the foreign key is accepted, including a category from a household the caller has
+        // left: the row then vanishes from every member's list, because a Transaction's
+        // Category is a required navigation and the filter hides it.
+        var category = await _categoryRepository.GetByIdAsync(dto.CategoryId, cancellationToken);
+
+        if (category is null)
+            return null;
+
         var transaction = new Transaction
         {
             Id = id,

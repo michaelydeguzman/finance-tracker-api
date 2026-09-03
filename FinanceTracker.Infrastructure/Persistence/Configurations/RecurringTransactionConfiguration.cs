@@ -54,7 +54,17 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+
+            // Restrict here as well. A household is deleted only once it is empty, and a
+            // cascade would turn "the owner deleted the household" into "everyone's shared
+            // history disappeared".
+            builder.HasOne<Household>()
+                .WithMany()
+                .HasForeignKey(e => e.HouseholdId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             builder.HasIndex(e => new { e.UserId, e.Status });
+            builder.HasIndex(e => new { e.HouseholdId, e.Status });
             builder.HasIndex(e => e.CategoryId);
             builder.HasIndex(e => e.FrequencyId);
 
