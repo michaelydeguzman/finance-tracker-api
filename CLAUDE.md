@@ -190,6 +190,11 @@ Two consequences worth knowing:
 - Household members can edit and delete each other's records. That follows from the widened
   filter and is deliberate; the repositories' 404-on-another-tenant behaviour is unchanged
   for everyone outside the household.
+- **Deleting a category still cascades to its transactions** (`FK_Transactions_Categories`
+  is `Cascade`), and sharing widened who can pull that trigger: a member can delete a
+  category a housemate has been filing under and take that person's history with it, with
+  no guard and no undo. `DeleteCategoryCommandHandler` has no dependent check — a known gap,
+  worth closing before this feature is relied on.
 - Category uniqueness is still scoped to `(UserId, CategoryType, Name)`, so a household can
   see two categories with the same name if two members each created one.
 
