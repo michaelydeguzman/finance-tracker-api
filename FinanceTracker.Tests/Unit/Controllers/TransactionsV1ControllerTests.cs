@@ -2,7 +2,7 @@ using FinanceTracker.Application.Dtos;
 using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Features.Transactions.Commands.DeleteTransaction;
 using FinanceTracker.Application.Features.Transactions.Commands.UpdateTransaction;
-using FinanceTracker.Controllers;
+using FinanceTracker.API.Controllers;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -52,5 +52,28 @@ public class TransactionsV1ControllerTests
         var result = await sut.DeleteTransaction(id);
 
         result.Result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    /// <summary>
+    /// The controller is where a live token enters the pipeline. Every handler below it
+    /// forwards the token it is given, so an action that drops the request's own token
+    /// silently turns that whole chain into CancellationToken.None and leaves queries
+    /// running after the caller has disconnected.
+    /// </summary>
+    [Fact]
+    public async Task DeleteTransaction_ForwardsTheRequestCancellationTokenToTheSender()
+    {
+        using var cts = new CancellationTokenSource();
+        var sender = new Mock<ISender>();
+        sender.Setup(s => s.Send(It.IsAny<DeleteTransactionCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var sut = new TransactionsV1Controller(sender.Object);
+
+        await sut.DeleteTransaction(Guid.NewGuid(), cts.Token);
+
+        sender.Verify(
+            s => s.Send(It.IsAny<DeleteTransactionCommand>(), cts.Token),
+            Times.Once);
     }
 }

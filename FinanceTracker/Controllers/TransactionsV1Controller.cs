@@ -10,7 +10,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace FinanceTracker.Controllers;
+namespace FinanceTracker.API.Controllers;
 
 [ApiVersion("1.0")]
 [ApiController]
@@ -26,9 +26,11 @@ public class TransactionsV1Controller : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<ApiResponseDto<TransactionResponseDto>>> AddTransaction([FromBody] CreateTransactionDto dto)
+    public async Task<ActionResult<ApiResponseDto<TransactionResponseDto>>> AddTransaction(
+        [FromBody] CreateTransactionDto dto,
+        CancellationToken cancellationToken = default)
     {
-        var response = await _sender.Send(new CreateTransactionCommand(dto));
+        var response = await _sender.Send(new CreateTransactionCommand(dto), cancellationToken);
 
         // Matches the recurring endpoint's answer for the same cause: the category is the
         // caller's to name, and naming one they cannot reach is a bad request, not a 500.
@@ -39,9 +41,12 @@ public class TransactionsV1Controller : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<ActionResult<ApiResponseDto<TransactionResponseDto>>> UpdateTransaction(Guid id, [FromBody] UpdateTransactionDto dto)
+    public async Task<ActionResult<ApiResponseDto<TransactionResponseDto>>> UpdateTransaction(
+        Guid id,
+        [FromBody] UpdateTransactionDto dto,
+        CancellationToken cancellationToken = default)
     {
-        var updated = await _sender.Send(new UpdateTransactionCommand(id, dto));
+        var updated = await _sender.Send(new UpdateTransactionCommand(id, dto), cancellationToken);
         if (updated is null)
             return NotFound(ApiResponseDto<TransactionResponseDto>.Fail("Transaction not found."));
 
@@ -49,9 +54,11 @@ public class TransactionsV1Controller : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<ActionResult<ApiResponseDto<string>>> DeleteTransaction(Guid id)
+    public async Task<ActionResult<ApiResponseDto<string>>> DeleteTransaction(
+        Guid id,
+        CancellationToken cancellationToken = default)
     {
-        var deleted = await _sender.Send(new DeleteTransactionCommand(id));
+        var deleted = await _sender.Send(new DeleteTransactionCommand(id), cancellationToken);
         if (!deleted)
             return NotFound(ApiResponseDto<string>.Fail("Transaction not found."));
 
@@ -65,7 +72,8 @@ public class TransactionsV1Controller : ControllerBase
         [FromQuery] DateTime? to,
         [FromQuery] List<Guid>? categoryIds,
         [FromQuery] int? page,
-        [FromQuery] int? pageSize)
+        [FromQuery] int? pageSize,
+        CancellationToken cancellationToken = default)
     {
         var categoryIdsKeyPresent = Request.Query.Keys.Any(k =>
             string.Equals(k, "categoryIds", StringComparison.OrdinalIgnoreCase));
@@ -97,7 +105,7 @@ public class TransactionsV1Controller : ControllerBase
             categoryIds,
             categoryIdsKeyPresent,
             page,
-            pageSize));
+            pageSize), cancellationToken);
 
         if (!result.IsPaged)
             return Ok(ApiResponseDto<List<TransactionResponseDto>>.Ok(result.Items.ToList()));

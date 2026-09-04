@@ -219,4 +219,9 @@ Two consequences worth knowing:
   after the client has gone. `ITransactionRepository.GetTransactionsQueryable()` is the
   exception — nothing executes until the caller enumerates it, and that call site passes
   its own token.
+- **Controller actions take the same trailing token and pass it to `_sender.Send`.** They are
+  where a live token enters the chain: MVC binds the parameter from `HttpContext.RequestAborted`,
+  and `ISender.Send` defaults to `CancellationToken.None` when the argument is omitted. An
+  action that drops it makes every forwarding rule below it moot, because what it forwards is
+  a token that is never cancelled.
 - Add or update tests alongside behavior changes; prefer writing the failing test first.
