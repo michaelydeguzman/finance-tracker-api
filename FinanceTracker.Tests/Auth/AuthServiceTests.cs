@@ -234,4 +234,39 @@ public class AuthServiceTests
 
         (await h.Context.Users.SingleAsync()).EmailVerifiedAt.Should().NotBeNull();
     }
+
+    // --- Cancellation ---
+
+    /// <summary>
+    /// These messages are sent after their work is committed, so the caller must not be able
+    /// to cancel them. Requesting a reset consumes any outstanding one first: a send the
+    /// caller could cancel would leave the owner's previous link dead and its replacement
+    /// never delivered, with no way to tell that had happened.
+    /// </summary>
+    [Fact]
+    public async Task RequestPasswordReset_SendsTheEmailWithATokenTheCallerCannotCancel()
+    {
+        using var h = new AuthServiceHarness();
+        await h.Service.RegisterAsync(Registration());
+        h.Email.Tokens.Clear();
+
+        using var cts = new CancellationTokenSource();
+        await h.Service.RequestPasswordResetAsync(new EmailOnlyRequestDto { Email = Email }, cts.Token);
+
+        h.Email.Tokens.Should().ContainSingle();
+        h.Email.Tokens[0].CanBeCanceled.Should().BeFalse("the work this message describes is already saved");
+    }
+
+    /// <summary>Registration commits the account before mailing the verification link.</summary>
+    [Fact]
+    public async Task Register_SendsTheVerificationEmailWithATokenTheCallerCannotCancel()
+    {
+        using var h = new AuthServiceHarness();
+
+        using var cts = new CancellationTokenSource();
+        await h.Service.RegisterAsync(Registration(), cts.Token);
+
+        h.Email.Tokens.Should().ContainSingle();
+        h.Email.Tokens[0].CanBeCanceled.Should().BeFalse("the account is already created");
+    }
 }

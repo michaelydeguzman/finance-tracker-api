@@ -98,13 +98,18 @@ public sealed class InviteHouseholdMemberCommandHandler
         // Sent after the invitation is committed, and through NonFatalEmailSender, so a dead
         // mail server does not turn a saved invitation into a failed request. The invitee can
         // still find it on their households page.
+        //
+        // CancellationToken.None for the same reason: the row is already saved, and
+        // HasOpenInvitationAsync above will refuse a re-invite to the same address. A caller
+        // who disconnects here would otherwise leave an invitation that can neither be
+        // delivered nor re-sent.
         await _email.SendAsync(
             HouseholdEmailFactory.Invitation(
                 invitedEmail,
                 household.Name,
                 inviter.DisplayName ?? inviter.Email,
                 $"{_authOptions.AppBaseUrl.TrimEnd('/')}/households"),
-            cancellationToken);
+            CancellationToken.None);
 
         return HouseholdResult<HouseholdInvitationDto>.Success(
             HouseholdInvitationDto.FromEntity(invitation, household.Name));

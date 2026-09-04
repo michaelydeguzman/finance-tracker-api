@@ -51,9 +51,12 @@ public sealed class AuthService : IAuthService
             await _users.AddTokenAsync(recovery.Record, cancellationToken);
             await _users.SaveChangesAsync(cancellationToken);
 
+            // CancellationToken.None, not the request's: the token this message carries is
+            // already committed above. Honouring a cancellation here would leave the caller's
+            // previous link consumed and its replacement never sent.
             await _email.SendAsync(
                 AuthEmailFactory.AccountAlreadyExists(existing.Email, Link("reset-password", recovery.PlainText)),
-                cancellationToken);
+                CancellationToken.None);
 
             return;
         }
@@ -95,9 +98,12 @@ public sealed class AuthService : IAuthService
         await _users.AddTokenAsync(verification.Record, cancellationToken);
         await _users.SaveChangesAsync(cancellationToken);
 
+        // CancellationToken.None, not the request's: the token this message carries is
+        // already committed above. Honouring a cancellation here would leave the caller's
+        // previous link consumed and its replacement never sent.
         await _email.SendAsync(
             AuthEmailFactory.EmailVerification(user.Email, Link("verify-email", verification.PlainText)),
-            cancellationToken);
+            CancellationToken.None);
     }
 
     public async Task<AuthResultDto?> LoginAsync(LoginRequestDto request, CancellationToken cancellationToken = default)
@@ -211,9 +217,12 @@ public sealed class AuthService : IAuthService
         await _users.AddTokenAsync(issued.Record, cancellationToken);
         await _users.SaveChangesAsync(cancellationToken);
 
+        // CancellationToken.None, not the request's: the token this message carries is
+        // already committed above. Honouring a cancellation here would leave the caller's
+        // previous link consumed and its replacement never sent.
         await _email.SendAsync(
             AuthEmailFactory.MagicLink(user.Email, Link("magic-link", issued.PlainText)),
-            cancellationToken);
+            CancellationToken.None);
     }
 
     public async Task<AuthResultDto?> ConsumeMagicLinkAsync(
@@ -248,9 +257,12 @@ public sealed class AuthService : IAuthService
         await _users.AddTokenAsync(issued.Record, cancellationToken);
         await _users.SaveChangesAsync(cancellationToken);
 
+        // CancellationToken.None, not the request's: the token this message carries is
+        // already committed above. Honouring a cancellation here would leave the caller's
+        // previous link consumed and its replacement never sent.
         await _email.SendAsync(
             AuthEmailFactory.PasswordReset(user.Email, Link("reset-password", issued.PlainText)),
-            cancellationToken);
+            CancellationToken.None);
     }
 
     public async Task<bool> ResetPasswordAsync(
@@ -324,9 +336,12 @@ public sealed class AuthService : IAuthService
         await _users.AddTokenAsync(issued.Record, cancellationToken);
         await _users.SaveChangesAsync(cancellationToken);
 
+        // CancellationToken.None, not the request's: the token this message carries is
+        // already committed above. Honouring a cancellation here would leave the caller's
+        // previous link consumed and its replacement never sent.
         await _email.SendAsync(
             AuthEmailFactory.EmailVerification(user.Email, Link("verify-email", issued.PlainText)),
-            cancellationToken);
+            CancellationToken.None);
     }
 
     public async Task<bool> VerifyEmailAsync(TokenRequestDto request, CancellationToken cancellationToken = default)
