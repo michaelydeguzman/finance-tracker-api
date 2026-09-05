@@ -15,7 +15,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace FinanceTracker.Controllers;
+namespace FinanceTracker.API.Controllers;
 
 /// <summary>
 /// The templates the worker expands. Everything here is scoped to the bearer token's user by
@@ -36,16 +36,19 @@ public class RecurringTransactionsV1Controller : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<ApiResponseDto<List<RecurringTransactionResponseDto>>>> GetRecurringTransactions(
-        [FromQuery] RecurringTransactionStatus? status)
+        [FromQuery] RecurringTransactionStatus? status,
+        CancellationToken cancellationToken = default)
     {
-        var templates = await _sender.Send(new GetRecurringTransactionsQuery(status));
+        var templates = await _sender.Send(new GetRecurringTransactionsQuery(status), cancellationToken);
         return Ok(ApiResponseDto<List<RecurringTransactionResponseDto>>.Ok(templates));
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> GetRecurringTransactionById(Guid id)
+    public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> GetRecurringTransactionById(
+        Guid id,
+        CancellationToken cancellationToken = default)
     {
-        var template = await _sender.Send(new GetRecurringTransactionByIdQuery(id));
+        var template = await _sender.Send(new GetRecurringTransactionByIdQuery(id), cancellationToken);
         if (template is null)
             return NotFound(ApiResponseDto<RecurringTransactionResponseDto>.Fail("Recurring transaction not found."));
 
@@ -54,9 +57,10 @@ public class RecurringTransactionsV1Controller : ControllerBase
 
     [HttpPost]
     public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> AddRecurringTransaction(
-        [FromBody] CreateRecurringTransactionDto dto)
+        [FromBody] CreateRecurringTransactionDto dto,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new CreateRecurringTransactionCommand(dto));
+        var result = await _sender.Send(new CreateRecurringTransactionCommand(dto), cancellationToken);
 
         if (result.Outcome is not RecurringTransactionOutcome.Success)
             return Failure(result);
@@ -70,30 +74,39 @@ public class RecurringTransactionsV1Controller : ControllerBase
     [HttpPut("{id}")]
     public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> UpdateRecurringTransaction(
         Guid id,
-        [FromBody] UpdateRecurringTransactionDto dto)
+        [FromBody] UpdateRecurringTransactionDto dto,
+        CancellationToken cancellationToken = default)
     {
-        return Respond(await _sender.Send(new UpdateRecurringTransactionCommand(id, dto)));
+        return Respond(await _sender.Send(new UpdateRecurringTransactionCommand(id, dto), cancellationToken));
     }
 
     // Transitions are POSTs to named sub-resources rather than a PATCH of a status field, so
     // that "stop generating" can never be an accidental side effect of an ordinary edit, and
     // so each transition can enforce its own rules.
     [HttpPost("{id}/pause")]
-    public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> PauseRecurringTransaction(Guid id)
-        => Respond(await _sender.Send(new PauseRecurringTransactionCommand(id)));
+    public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> PauseRecurringTransaction(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => Respond(await _sender.Send(new PauseRecurringTransactionCommand(id), cancellationToken));
 
     [HttpPost("{id}/resume")]
-    public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> ResumeRecurringTransaction(Guid id)
-        => Respond(await _sender.Send(new ResumeRecurringTransactionCommand(id)));
+    public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> ResumeRecurringTransaction(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => Respond(await _sender.Send(new ResumeRecurringTransactionCommand(id), cancellationToken));
 
     [HttpPost("{id}/cancel")]
-    public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> CancelRecurringTransaction(Guid id)
-        => Respond(await _sender.Send(new CancelRecurringTransactionCommand(id)));
+    public async Task<ActionResult<ApiResponseDto<RecurringTransactionResponseDto>>> CancelRecurringTransaction(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => Respond(await _sender.Send(new CancelRecurringTransactionCommand(id), cancellationToken));
 
     [HttpDelete("{id}")]
-    public async Task<ActionResult<ApiResponseDto<string>>> DeleteRecurringTransaction(Guid id)
+    public async Task<ActionResult<ApiResponseDto<string>>> DeleteRecurringTransaction(
+        Guid id,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new DeleteRecurringTransactionCommand(id));
+        var result = await _sender.Send(new DeleteRecurringTransactionCommand(id), cancellationToken);
 
         if (result.Outcome is not RecurringTransactionOutcome.Success)
         {

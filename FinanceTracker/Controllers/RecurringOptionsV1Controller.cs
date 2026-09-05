@@ -5,26 +5,26 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace FinanceTracker.Controllers
+namespace FinanceTracker.API.Controllers;
+
+[ApiVersion("1.0")]
+[ApiController]
+[Authorize]
+[Route("api/v{version:apiVersion}/recurring-options")]
+public class RecurringOptionsV1Controller : ControllerBase
 {
-    [ApiVersion("1.0")]
-    [ApiController]
-    [Authorize]
-    [Route("api/v{version:apiVersion}/recurring-options")]
-    public class RecurringOptionsV1Controller : ControllerBase
+    private readonly ISender _sender;
+
+    public RecurringOptionsV1Controller(ISender sender)
     {
-        private readonly ISender _sender;
+        _sender = sender;
+    }
 
-        public RecurringOptionsV1Controller(ISender sender)
-        {
-            _sender = sender;
-        }
-
-        [HttpGet]
-        public async Task<ActionResult<ApiResponseDto<List<FrequencyResponseDto>>>> GetRecurringOptions()
-        {
-            var options = await _sender.Send(new GetRecurringOptionsQuery());
-            return Ok(ApiResponseDto<List<FrequencyResponseDto>>.Ok(options));
-        }
+    [HttpGet]
+    public async Task<ActionResult<ApiResponseDto<List<FrequencyResponseDto>>>> GetRecurringOptions(
+        CancellationToken cancellationToken = default)
+    {
+        var options = await _sender.Send(new GetRecurringOptionsQuery(), cancellationToken);
+        return Ok(ApiResponseDto<List<FrequencyResponseDto>>.Ok(options));
     }
 }

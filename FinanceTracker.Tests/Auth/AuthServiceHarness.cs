@@ -13,11 +13,15 @@ public sealed class CapturingEmailSender : IEmailSender
 {
     public List<EmailMessage> Sent { get; } = new();
 
+    /// <summary>The token each send was handed, so a test can assert what may cancel it.</summary>
+    public List<CancellationToken> Tokens { get; } = new();
+
     public EmailMessage? Last => Sent.Count == 0 ? null : Sent[^1];
 
     public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
         Sent.Add(message);
+        Tokens.Add(cancellationToken);
         return Task.CompletedTask;
     }
 }
