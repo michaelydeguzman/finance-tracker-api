@@ -1,0 +1,104 @@
+name: Deploy
+
+# Ships main to Azure Container Apps — only a commit CI has already passed. It runs when the
+# CI workflow finishes on main and does nothing unless that run succeeded. See DEPLOYMENT.md.
+#
+# Migrations are deliberately NOT applied here. Applying one is a local, eyes-on operation
+# (CLAUDE.md), so a change that needs one is migrated by hand *before* it is merged.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+# One deploy at a time, and never abandoned halfway: the API and the worker move together.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-finance-tracker
+  API_APP: ca-finance-tracker-api
+  WORKER_JOB: caj-finance-tracker-worker
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  images:
+    # workflow_run's branch filter matches a branch *name*, and a pull request from a fork
+    # can be named main. Only a push to this repository's own main may reach production.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: finance-tracker-api
+            dockerfile: FinanceTracker/Dockerfile
+          - image: finance-tracker-worker
+            dockerfile: FinanceTracker.Worker/Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      # Registry paths must be lowercase; an owner name need not be.
+      - run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tagged with the commit, which is what a deploy pins, and with "main", which is what
+      # the one-time `az containerapp create` in DEPLOYMENT.md points at.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER }}/${{ matrix.image }}:${{ env.SHA }}
+            ghcr.io/${{ env.OWNER }}/${{ matrix.image }}:main
+
+  deploy:
+    needs: images
+    # Skipped, not failed, until the Azure side exists and these variables are set — so
+    # merging this before anything is provisioned still leaves main green.
+    if: vars.AZURE_CLIENT_ID != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Point the API and the worker at this commit's images
+        run: |
+          az extension add --name containerapp --upgrade --only-show-errors
+          az containerapp update -g "$RESOURCE_GROUP" -n "$API_APP" \
+            --image "ghcr.io/$OWNER/finance-tracker-api:$SHA" --output none
+          az containerapp job update -g "$RESOURCE_GROUP" -n "$WORKER_JOB" \
+            --image "ghcr.io/$OWNER/finance-tracker-worker:$SHA" --output none
+
+      # /healthz never touches the database, so this wakes the API without waking SQL.
+      - name: Smoke-test the API
+        run: |
+          fqdn=$(az containerapp show -g "$RESOURCE_GROUP" -n "$API_APP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          curl --fail --silent --show-error --retry 10 --retry-delay 6 --retry-all-errors \
+            --max-time 30 "https://$fqdn/healthz"

@@ -11,7 +11,7 @@ ASP.NET Core 8 REST API for personal finance tracking. Clean Architecture, EF Co
 | `FinanceTracker.Domain/` | Entities, pure domain services, and the repository interfaces under `Repositories/`. Depends on nothing else. |
 | `FinanceTracker.Application/` | DTOs, MediatR commands/queries + handlers, service interfaces. |
 | `FinanceTracker.Infrastructure/` | `FinanceTrackerContext`, entity configurations, repository implementations, EF migrations. |
-| `FinanceTracker.Worker/` | Run-and-exit console app that materializes recurring transactions. Triggered by Windows Task Scheduler. |
+| `FinanceTracker.Worker/` | Run-and-exit console app that materializes recurring transactions. Runs daily as an Azure Container Apps Job (see `DEPLOYMENT.md`). |
 | `FinanceTracker.Tests/` | xunit + FluentAssertions + Moq. Unit, integration, and worker tests. |
 
 Dependencies point inward. `Domain` references nothing; `Application` and `Infrastructure` are
@@ -78,16 +78,34 @@ block. Do not add one, and never commit credentials — a previous commit had to
 
 ## Data safety — read before touching the database
 
-**The local database holds real personal financial records, not seed data.**
+**Both databases hold real personal financial records, not seed data** — the local one, and
+the Azure SQL database production runs on, which was copied from it (`DEPLOYMENT.md`).
 
-- Never run destructive or bulk-update SQL against it.
+- Never run destructive or bulk-update SQL against either.
 - *Generating* an EF migration is safe anywhere. **Applying** one
   (`dotnet ef database update`) is a deliberate, local, eyes-on operation. Never apply
-  migrations from a cloud or remote session — those have no route to this database and no
-  business mutating real data.
+  migrations from a cloud or remote session — those have no business mutating real data.
+  The deploy pipeline deliberately does not migrate either: a change that needs a migration
+  is applied to Azure by hand, from the owner's machine, *before* it is merged.
 - Tests never touch it. Integration tests swap in EF Core InMemory via
   `FinanceTracker.Tests/Integration/FinanceTrackerWebApplicationFactory.cs`, so the entire
   suite runs with no local infrastructure — including from a cloud session.
+
+## Production
+
+`DEPLOYMENT.md` is the runbook: Container Apps for the API and worker, a serverless Azure SQL
+database on the free offer, merges to `main` deployed by `.github/workflows/deploy.yml` once
+CI passes. Two things in the code exist because of that database, which auto-pauses when idle
+and is billed for every second it is awake:
+
+- **`/healthz` never touches the database.** Anything that polls it would otherwise keep the
+  database from ever pausing. `HealthEndpointIntegrationTests` points the API at a dead SQL
+  Server and fails if `/healthz` stops answering 200.
+- **Both hosts use `EnableRetryOnFailure`**, because the first connection after a pause is
+  refused while the database resumes. A retrying strategy throws on a transaction begun by
+  user code, so anything that needs one must run inside `Database.CreateExecutionStrategy()`.
+  The worker's run lock opens its connection through that strategy for the same reason: it
+  is the first thing a scheduled run does, and a raw `OpenAsync` is not retried.
 
 ## Recurring transactions
 

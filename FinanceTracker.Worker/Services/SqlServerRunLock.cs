@@ -25,10 +25,15 @@ public sealed class SqlServerRunLock : IRunLock
 
     public async Task<bool> TryAcquireAsync(CancellationToken cancellationToken = default)
     {
-        _connection = _context.Database.GetDbConnection();
+        // Opened through the context's execution strategy, not the raw connection. This is
+        // the first thing a run does, so against an auto-paused database it is the call that
+        // gets refused while the database resumes — and a raw OpenAsync is not retried.
+        // Opening it through the context also tells EF to leave it open between operations,
+        // which the session-scoped lock depends on.
+        await _context.Database.CreateExecutionStrategy().ExecuteAsync(
+            _context.Database.OpenConnectionAsync, cancellationToken);
 
-        if (_connection.State != ConnectionState.Open)
-            await _connection.OpenAsync(cancellationToken);
+        _connection = _context.Database.GetDbConnection();
 
         using var command = _connection.CreateCommand();
         command.CommandText = "sp_getapplock";

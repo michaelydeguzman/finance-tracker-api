@@ -1,0 +1,13 @@
+# Build context is the repository root (the root Directory.*.props files are part of every
+# build), so everything not needed by a Dockerfile is kept out of it here.
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
+.git/
+.github/
+.claude/
+FinanceTracker.Tests/
+
+# A database export is every real financial record; it must never be baked into an image.
+*.bacpac

@@ -21,7 +21,18 @@ using Asp.Versioning;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<FinanceTrackerContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("FinanceTrackerDB")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("FinanceTrackerDB"),
+        // The deployed database is serverless and auto-pauses when idle, and refuses
+        // connections with a transient error while it resumes. Retrying turns the first
+        // request after a quiet spell into a slow one rather than a failed one.
+        //
+        // A retrying strategy rejects transactions begun by user code. Nothing here begins
+        // one today; anything that needs to must run inside CreateExecutionStrategy().
+        sql => sql.EnableRetryOnFailure()));
+
+// Liveness only, and deliberately without a database check: see HealthEndpointIntegrationTests.
+builder.Services.AddHealthChecks();
 
 builder.Services.AddHttpContextAccessor();
 
@@ -236,6 +247,8 @@ app.UseHouseholdScope();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapHealthChecks("/healthz");
 
 app.Run();
 
