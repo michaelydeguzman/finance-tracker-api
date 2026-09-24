@@ -78,6 +78,12 @@ public class AuthV1Controller : ControllerBase
     }
 
     [HttpPost("exchange")]
+    // Not rate limited, like refresh below. Every auth call arrives from the front end's
+    // servers, so the per-address limit is one bucket for everyone, fed by anonymous account
+    // routes a stranger can drive. Keeping someone signed in must not draw from it. Neither
+    // route needs it: both answer only the front end, and nothing here can be guessed —
+    // exchange acts on a sign-in the provider already completed, refresh on a random token.
+    [DisableRateLimiting]
     public async Task<ActionResult<ApiResponseDto<AuthResultDto>>> Exchange(
         [FromBody] ExternalLoginRequestDto dto,
         CancellationToken cancellationToken = default)
@@ -164,6 +170,7 @@ public class AuthV1Controller : ControllerBase
     }
 
     [HttpPost("refresh")]
+    [DisableRateLimiting]
     public async Task<ActionResult<ApiResponseDto<AuthResultDto>>> Refresh(
         [FromBody] TokenRequestDto dto,
         CancellationToken cancellationToken = default)

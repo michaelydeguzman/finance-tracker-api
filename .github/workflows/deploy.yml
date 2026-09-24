@@ -147,5 +147,5 @@ jobs:
             echo "Attempt $attempt: serving '${served:-nothing}', waiting for $SHA."
             sleep 10
           done
-          echo "::error::After five minutes the API is still not serving $SHA."
+          echo "::error::After 30 attempts the API is still not serving $SHA."
           exit 1

@@ -25,7 +25,9 @@ session ends. The data copy in step 2 runs on your own machine, because that is 
 local database is.
 
 Set these at the start of each Cloud Shell session. `read -rs` takes each secret without
-echoing it or writing it to shell history; nothing below puts a secret on a command line.
+echoing it or writing it to shell history, and the commands below refer to the variables —
+so no secret is typed into a command or saved in history (they still reach `az` as arguments,
+inside a session that is discarded when it ends).
 
 ```bash
 RG=rg-finance-tracker
@@ -44,11 +46,21 @@ APP_CONN="Server=tcp:$SQL.database.windows.net,1433;Initial Catalog=financetrack
 
 ### 0. Before you start
 
+- **Merge the UI change first, then this one.** The API now answers auth calls only when
+  they carry the shared secret, and only the updated UI sends it on every call — an old UI
+  would still sign in with Google but fail every token refresh, signing everyone out within
+  15 minutes, with password and magic-link sign-in dead. The updated UI works against the old
+  API (which ignores the extra header), so UI first is safe in either environment, including
+  local development.
 - **Merge this deployment change to `main`.** CI runs, then the Deploy workflow builds and
   pushes `ghcr.io/<owner>/finance-tracker-api:main` and `…/finance-tracker-worker:main`.
   Its `deploy` job is skipped until step 5 — that is expected, not a failure.
 - **A GitHub classic personal access token with only `read:packages`.** Container Apps uses
-  it to pull the private images. (Fine-grained tokens do not cover packages.)
+  it to pull the private images. (Fine-grained tokens do not cover packages.) **Note its
+  expiry date and set a reminder**: when it expires, the next scale-up from zero or deploy
+  cannot pull the image and the API goes down. Renew with
+  `az containerapp registry set -g $RG -n ca-finance-tracker-api --server ghcr.io --username $GH_USER --password "$GHCR_TOKEN"`
+  and the same for the job (`az containerapp job registry set … -n caj-finance-tracker-worker`).
 - **Generate the secrets** (`openssl rand -base64 48` in Cloud Shell, once each): the JWT
   signing key, the BFF shared secret (the same value goes to Vercel as `API_BFF_SECRET`), and
   two SQL passwords — one for the server admin, one for the app. Keep them in a password
@@ -97,7 +109,9 @@ az sql server firewall-rule create -g $RG -s $SQL -n AllowAzureServices \
 Then in the portal, on the SQL server's **Networking** page, choose **Add your client IPv4
 address** so your own machine can reach it for step 2 and for future migrations. The
 database's overview page should show this month's remaining free amount — that is how you
-know the free offer, not the free account's 12-month SQL deal, is the one applied.
+know the free offer, not the free account's 12-month SQL deal, is the one applied. Confirm the
+pause delay took, too: `az sql db show -g $RG -s $SQL -n financetracker --query autoPauseDelay`
+should print `15`; if not, set it on the database's **Compute + storage** page.
 
 ### 2. Copy your records (on your machine)
 
@@ -114,15 +128,17 @@ Check yours, and remove those lines afterwards.
    dotnet ef migrations list --project FinanceTracker.Infrastructure --startup-project FinanceTracker
    ```
    Nothing should be marked `(Pending)`.
-3. **Take a backup, then freeze the database.** An export is not a transactional snapshot: it
+3. **Freeze the database, then back it up.** An export is not a transactional snapshot: it
    reads table by table, and a write landing mid-export (the worker advancing a template, say)
-   can produce a copy that row counts will not catch. Read-only makes that impossible. The
-   backup is also your long-term copy — Azure's automatic backups only reach back about a week.
+   can produce a copy that row counts will not catch. Read-only makes that impossible, and
+   freezing first makes the backup and the export the same moment. The backup is the
+   pre-cloud copy of everything — keep it (see *Backups* below for what comes after).
    ```sql
    -- Against your LOCAL database. The .bak lands in SQL Server's default backup folder;
    -- it is every record you have, so keep it somewhere private.
-   BACKUP DATABASE [<local database name>] TO DISK = N'financetracker-pre-cloud.bak' WITH COPY_ONLY, CHECKSUM;
    ALTER DATABASE [<local database name>] SET READ_ONLY WITH ROLLBACK IMMEDIATE;
+   BACKUP DATABASE [<local database name>] TO DISK = N'financetracker-pre-cloud.bak' WITH COPY_ONLY, CHECKSUM;
+   RESTORE VERIFYONLY FROM DISK = N'financetracker-pre-cloud.bak' WITH CHECKSUM;
    ```
 4. **Export** with SqlPackage (`dotnet tool install -g microsoft.sqlpackage`). Write the file
    **outside the repository** — it is every record you have. (`*.bacpac` is git- and
@@ -161,7 +177,19 @@ Check yours, and remove those lines afterwards.
           (SELECT collation_name FROM sys.columns
            WHERE object_id = OBJECT_ID('Categories') AND name = 'Name') AS [category_name_collation];
    ```
-7. **Delete the `.bacpac`** once everything matches — with Shift+Delete, or empty the Recycle
+7. **Check every account is verified.** Once live, the first Google sign-in to an account
+   nobody has verified removes its password and ends its sessions — the defence against a
+   stranger pre-registering someone's address. Email is not being sent yet, so a password lost
+   that way cannot be reset. Run against Azure:
+   ```sql
+   SELECT u.Email, u.EmailVerifiedAt, i.Provider
+   FROM Users u LEFT JOIN UserIdentities i ON i.UserId = u.Id
+   ORDER BY u.Email;
+   ```
+   Any row with a null `EmailVerifiedAt` is an account whose password will not survive its
+   owner's first Google sign-in. For the two of you, signing in with Google is enough; just
+   know it will happen.
+8. **Delete the `.bacpac`** once everything matches — with Shift+Delete, or empty the Recycle
    Bin afterwards. Keep the `.bak` from step 3.
 
 ### 3. A login for the app
@@ -330,6 +358,22 @@ the new commit, so it fails if the new revision never starts rather than passing
   ```
   Never from a cloud or remote session.
 
+## Backups
+
+Azure's automatic backups on the free offer reach back **7 days** and nothing further — no
+long-term retention and no database copy. The pre-cloud `.bak` covers nothing entered after the
+cutover. Anything noticed later than a week — a category deleted and its transactions cascaded
+with it, say — is gone unless you have your own copy.
+
+So take one **monthly**, from your machine, and keep it somewhere private and off the repo:
+
+```
+sqlpackage /Action:Export /SourceConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=financetracker;User ID=ftadmin;Password=<admin password>;Encrypt=True;Connect Timeout=60;" /TargetFile:"<private folder>\financetracker-<yyyy-mm>.bacpac"
+```
+
+This wakes the database once, like any other visit. A restore is an import into a new, empty
+database (step 2's import), never over the live one.
+
 ## Keeping it free
 
 - **The database is billed for every second it is awake**, and each wake-up keeps it awake
@@ -355,7 +399,12 @@ This setup is right for a closed test and deliberately incomplete for strangers:
 - **Email** — a domain and Resend (`Email__Provider=Resend`); password reset and magic links
   need it.
 - **Rate limits are per BFF, not per person.** The API partitions them by client address, and
-  every request comes from Vercel's servers, so all users share one bucket.
+  every request comes from Vercel's servers, so all users share one bucket — fed by the
+  anonymous account routes (forgot password, magic link) anyone can call. Refresh and SSO
+  exchange are exempt, so a flood cannot sign existing sessions out, but it can still block
+  password and magic-link sign-in for everyone. Before strangers arrive: a Vercel firewall
+  rate rule on `/api/account/*` and the credentials callback, and a limit keyed on the real
+  client address.
 - **The category-delete cascade** in CLAUDE.md's Households section: one member can erase
   another's history with no undo.
 - **Dates** — the dashboard turns its local date ranges into UTC instants and compares them

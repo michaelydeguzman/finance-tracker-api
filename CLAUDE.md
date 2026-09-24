@@ -95,7 +95,7 @@ the Azure SQL database production runs on, which was copied from it (`DEPLOYMENT
 
 `DEPLOYMENT.md` is the runbook: Container Apps for the API and worker, a serverless Azure SQL
 database on the free offer, merges to `main` deployed by `.github/workflows/deploy.yml` once
-CI passes. Two things in the code exist because of that database, which auto-pauses when idle
+CI passes. Three things in the code exist because of that database, which auto-pauses when idle
 and is billed for every second it is awake:
 
 - **`/healthz` never touches the database** for the anonymous callers that poll it (a request
@@ -114,13 +114,18 @@ and is billed for every second it is awake:
   hold it — with nothing failing. A run that has lost the lock stops, and its remaining
   templates stay overdue for the next run. Release is best-effort for the same reason.
 
-Two rules exist because the API has a public address:
+Three rules exist because the API has a public address:
 
 - **Every auth endpoint is BFF-only** — `[BffOnly]` sits on `AuthV1Controller` itself, not on
   one action. Who may sign up is decided in the front end (`AUTH_SIGNUP_MODE`), so an auth
   endpoint that answered direct callers would let anyone register past it, or claim an address
-  before its owner arrives. `AuthWireFormatIntegrationTests` asserts every route refuses a
-  caller without the secret; a new auth action is covered only if it is added there too.
+  before its owner arrives. `AuthRateLimitIntegrationTests` asserts the filter is in every auth
+  endpoint's metadata, so a new action is covered without being listed anywhere.
+- **Refresh and exchange are exempt from the auth rate limit** (`[DisableRateLimiting]`). The
+  per-address bucket is shared by everyone — every call arrives from the front end's servers —
+  and anonymous account routes feed it, so a flood would otherwise sign every session out at
+  its next refresh. Neither needs the limit: both answer only the BFF, and neither takes
+  anything guessable.
 - **The logging email provider withholds bodies** unless `Email:LogBodies` is set. Those
   bodies are live sign-in and reset links, and a deployment still on that provider ships its
   log to a workspace. Turn it on only locally.
