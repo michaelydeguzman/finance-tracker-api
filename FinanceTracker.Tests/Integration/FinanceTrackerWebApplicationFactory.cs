@@ -50,6 +50,7 @@ public sealed class FinanceTrackerWebApplicationFactory : WebApplicationFactory<
                 // ever would, from a single client address. Raised so the household tests
                 // exercise household rules rather than the rate limiter.
                 [$"{AuthOptions.SectionName}:{nameof(AuthOptions.HouseholdInvitesPerMinute)}"] = "1000",
+                [$"{AuthOptions.SectionName}:{nameof(AuthOptions.AuthRequestsPerMinute)}"] = "1000",
 
                 // Never a real provider from a test run.
                 [$"{EmailOptions.SectionName}:{nameof(EmailOptions.Provider)}"] = nameof(EmailProvider.Logging)

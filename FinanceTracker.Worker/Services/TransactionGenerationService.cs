@@ -57,6 +57,17 @@ public class TransactionGenerationService
                 // and saved, or left untouched and still overdue for the next run.
                 cancellationToken.ThrowIfCancellationRequested();
 
+                // The lock is only as good as the session that took it. If the connection
+                // dropped and EF quietly reconnected, this run no longer excludes anyone, and
+                // carrying on could race a run that has since taken the lock. What is left
+                // stays overdue for the next run, which is where a stopped run's work goes.
+                if (!await _runLock.IsHeldAsync(cancellationToken))
+                {
+                    _logger.LogError(
+                        "Lost the run lock mid-run (the database connection was likely re-established); stopping. Remaining templates stay overdue for the next run.");
+                    return;
+                }
+
                 try
                 {
                     await GenerateForTemplateAsync(template, now, cancellationToken);

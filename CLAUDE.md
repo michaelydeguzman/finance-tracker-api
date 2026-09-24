@@ -98,14 +98,32 @@ database on the free offer, merges to `main` deployed by `.github/workflows/depl
 CI passes. Two things in the code exist because of that database, which auto-pauses when idle
 and is billed for every second it is awake:
 
-- **`/healthz` never touches the database.** Anything that polls it would otherwise keep the
-  database from ever pausing. `HealthEndpointIntegrationTests` points the API at a dead SQL
-  Server and fails if `/healthz` stops answering 200.
+- **`/healthz` never touches the database** for the anonymous callers that poll it (a request
+  carrying a bearer token still passes through `HouseholdScopeMiddleware`, which does).
+  Anything that polls a database-backed check would keep the database from ever pausing.
+  `HealthEndpointIntegrationTests` points the API at a dead SQL Server and fails if `/healthz`
+  stops answering 200. It also returns the image's commit in `X-Source-Sha`, which is how the
+  deploy pipeline knows the new revision is the one answering.
 - **Both hosts use `EnableRetryOnFailure`**, because the first connection after a pause is
   refused while the database resumes. A retrying strategy throws on a transaction begun by
   user code, so anything that needs one must run inside `Database.CreateExecutionStrategy()`.
   The worker's run lock opens its connection through that strategy for the same reason: it
   is the first thing a scheduled run does, and a raw `OpenAsync` is not retried.
+- **The worker checks its run lock before every template.** `sp_getapplock` is
+  session-scoped, and EF reconnects after a dropped connection on a new session that does not
+  hold it — with nothing failing. A run that has lost the lock stops, and its remaining
+  templates stay overdue for the next run. Release is best-effort for the same reason.
+
+Two rules exist because the API has a public address:
+
+- **Every auth endpoint is BFF-only** — `[BffOnly]` sits on `AuthV1Controller` itself, not on
+  one action. Who may sign up is decided in the front end (`AUTH_SIGNUP_MODE`), so an auth
+  endpoint that answered direct callers would let anyone register past it, or claim an address
+  before its owner arrives. `AuthWireFormatIntegrationTests` asserts every route refuses a
+  caller without the secret; a new auth action is covered only if it is added there too.
+- **The logging email provider withholds bodies** unless `Email:LogBodies` is set. Those
+  bodies are live sign-in and reset links, and a deployment still on that provider ships its
+  log to a workspace. Turn it on only locally.
 
 ## Recurring transactions
 

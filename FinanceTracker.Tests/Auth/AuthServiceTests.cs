@@ -198,9 +198,11 @@ public class AuthServiceTests
     public async Task Exchange_WithVerifiedEmailMatchingPasswordAccount_LinksToIt()
     {
         // The whole reason identities are their own table: one person, one account, two
-        // ways in.
+        // ways in. Verified first — both ways in survive only for someone who proved the
+        // address before the provider did.
         using var h = new AuthServiceHarness();
         await h.Service.RegisterAsync(Registration());
+        await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = h.LastEmailedToken() });
         var existingId = (await h.Context.Users.SingleAsync()).Id;
 
         var result = await h.Service.ExchangeExternalLoginAsync(External(verified: true));
@@ -233,6 +235,53 @@ public class AuthServiceTests
         await h.Service.ExchangeExternalLoginAsync(External(verified: true));
 
         (await h.Context.Users.SingleAsync()).EmailVerifiedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Exchange_AdoptingAnUnverifiedAccount_RevokesEveryEarlierWayIn()
+    {
+        // Pre-hijacking: a stranger registers the owner's address with a password of their
+        // own before the owner ever arrives. Nobody has proved the address, so the account
+        // sits unverified — until the owner signs in with a provider that vouches for it and
+        // is linked to that account. If the stranger's password and sessions survived, they
+        // would hold a key to everything the owner records from then on.
+        using var h = new AuthServiceHarness();
+        await h.Service.RegisterAsync(Registration());
+        var strangersSession = await h.Service.LoginAsync(
+            new LoginRequestDto { Email = Email, Password = Password });
+
+        await h.Service.ExchangeExternalLoginAsync(External(verified: true));
+
+        (await h.Service.LoginAsync(new LoginRequestDto { Email = Email, Password = Password }))
+            .Should().BeNull("the password was set by someone who never proved they own the address");
+        (await h.Service.RefreshAsync(new TokenRequestDto { Token = strangersSession!.RefreshToken }))
+            .Should().BeNull("sessions that password opened must end with it");
+        (await h.Context.UserIdentities.SingleAsync()).Provider.Should().Be(IdentityProvider.Google,
+            "the provider that proved the address is now the only way in");
+        (await h.Context.UserCredentials.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Exchange_AdoptingAnUnverifiedAccount_StillLetsTheOwnerSetAPassword()
+    {
+        // Losing the stranger's password must not cost the owner the option of one. The
+        // identity-row half of that — a leftover Password row would collide with the one a
+        // reset adds on the unique (UserId, Provider) index — is pinned by the single-identity
+        // assertion above, not here: InMemory does not enforce unique indexes.
+        using var h = new AuthServiceHarness();
+        await h.Service.RegisterAsync(Registration());
+        await h.Service.ExchangeExternalLoginAsync(External(verified: true));
+
+        await h.Service.RequestPasswordResetAsync(new EmailOnlyRequestDto { Email = Email });
+        var reset = await h.Service.ResetPasswordAsync(new ResetPasswordRequestDto
+        {
+            Token = h.LastEmailedToken(),
+            NewPassword = "the owner's own new password"
+        });
+
+        reset.Should().BeTrue();
+        (await h.Service.LoginAsync(new LoginRequestDto { Email = Email, Password = "the owner's own new password" }))
+            .Should().NotBeNull();
     }
 
     // --- Cancellation ---

@@ -19,9 +19,18 @@ public interface IRunLock
     Task<bool> TryAcquireAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Whether this process still holds the lock. A session-scoped lock is dropped with its
+    /// connection, and EF reconnects on a fresh session without complaint — so a run can
+    /// lose the lock with nothing failing, and has to ask.
+    /// </summary>
+    Task<bool> IsHeldAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Releases a lock previously taken by <see cref="TryAcquireAsync"/>. Takes no
     /// cancellation token on purpose: it runs on the shutdown path, where a token is already
-    /// cancelled, and a release that skipped itself there would strand the lock.
+    /// cancelled, and a release that skipped itself there would strand the lock. Must not
+    /// throw: it runs in a finally block, where an exception would replace whatever actually
+    /// ended the run.
     /// </summary>
     Task ReleaseAsync();
 }

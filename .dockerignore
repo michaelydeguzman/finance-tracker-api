@@ -10,4 +10,4 @@
 FinanceTracker.Tests/
 
 # A database export is every real financial record; it must never be baked into an image.
-*.bacpac
+**/*.bacpac

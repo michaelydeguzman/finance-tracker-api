@@ -1,8 +1,10 @@
 using System.Net;
 using FinanceTracker.Infrastructure.Persistence;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FinanceTracker.Tests.Integration;
@@ -26,6 +28,29 @@ public class HealthEndpointIntegrationTests : IClassFixture<FinanceTrackerWebApp
         var response = await _factory.CreateClient().GetAsync("/healthz");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Healthz_NamesTheCommitItWasBuiltFrom()
+    {
+        // The deploy pipeline waits for this header to match the commit it just shipped.
+        // Without it, a check against /healthz passes while the revision being replaced is
+        // still the one answering — including when the new one never starts at all.
+        using var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, config) =>
+                config.AddInMemoryCollection(new Dictionary<string, string?> { ["SOURCE_SHA"] = "abc123" })));
+
+        var response = await factory.CreateClient().GetAsync("/healthz");
+
+        response.Headers.GetValues("X-Source-Sha").Should().ContainSingle().Which.Should().Be("abc123");
+    }
+
+    [Fact]
+    public async Task Healthz_OmitsTheCommitHeaderWhenTheBuildDidNotRecordOne()
+    {
+        var response = await _factory.CreateClient().GetAsync("/healthz");
+
+        response.Headers.Contains("X-Source-Sha").Should().BeFalse();
     }
 
     [Fact]

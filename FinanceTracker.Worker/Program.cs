@@ -16,8 +16,10 @@ var host = Host.CreateDefaultBuilder(args)
         //
         // A retried save cannot duplicate a transaction. Keys are generated client-side when
         // an entity is added, so a save that committed but lost its acknowledgement re-sends
-        // the same key and fails on the primary key — which the per-template handler already
-        // treats as a failed template, left for the next run.
+        // the same key and fails on the primary key. The run then logs that template as
+        // failed even though its rows and advanced date are already committed — so the next
+        // run finds nothing to redo. A "failed" template in the log is worth checking before
+        // re-entering anything by hand.
         services.AddDbContext<FinanceTrackerContext>(options =>
             options.UseSqlServer(
                 context.Configuration.GetConnectionString("FinanceTrackerDB"),

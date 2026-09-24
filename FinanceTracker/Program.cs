@@ -8,6 +8,7 @@ using FinanceTracker.Application.Services;
 using FinanceTracker.Application.Services.Auth;
 using FinanceTracker.Application.Services.Email;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
@@ -130,19 +131,20 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+    // Both ceilings are resolved per request rather than captured once, so the configured
+    // value is read from whatever configuration the host actually ended up with — the same
+    // reason the JWT options above are bound through IOptions instead of read inline at startup.
     options.AddPolicy(RateLimitPolicies.Auth, context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,
+                PermitLimit = context.RequestServices
+                    .GetRequiredService<IOptions<AuthOptions>>().Value.AuthRequestsPerMinute,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
 
-    // Resolved per request rather than captured once, so the configured ceiling is read from
-    // whatever configuration the host actually ended up with — the same reason the JWT
-    // options above are bound through IOptions instead of read inline at startup.
     options.AddPolicy(RateLimitPolicies.HouseholdInvitations, context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -248,7 +250,22 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.MapHealthChecks("/healthz");
+// SOURCE_SHA is baked into the image at build time. The deploy pipeline waits for this header
+// to match the commit it shipped, which is how it knows the new revision is the one answering
+// rather than the one it replaced.
+app.MapHealthChecks("/healthz", new HealthCheckOptions
+{
+    ResponseWriter = (context, report) =>
+    {
+        var sourceSha = context.RequestServices.GetRequiredService<IConfiguration>()["SOURCE_SHA"];
+
+        if (!string.IsNullOrWhiteSpace(sourceSha))
+            context.Response.Headers["X-Source-Sha"] = sourceSha;
+
+        context.Response.ContentType = "text/plain";
+        return context.Response.WriteAsync(report.Status.ToString());
+    }
+});
 
 app.Run();
 

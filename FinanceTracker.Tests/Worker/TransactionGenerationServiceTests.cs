@@ -309,6 +309,30 @@ public class TransactionGenerationServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_WhenTheLockIsLostMidRun_StopsBeforeTheNextTemplate()
+    {
+        // The lock is session-scoped, and EF reconnects after a dropped connection without
+        // complaint — on a new session that does not hold it. A run that carried on would
+        // race any run that has since taken the lock, and nothing else stops the two
+        // generating the same occurrence twice.
+        using var context = CreateInMemoryContext();
+        var first = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1).AddMinutes(5), name: "First");
+        var second = CreateTemplate(RecurringTransactionStatus.Active, DateTime.UtcNow.AddDays(-1).AddMinutes(5), name: "Second");
+
+        var mockRepo = new Mock<IRecurringTransactionRepository>();
+        mockRepo.Setup(r => r.GetActiveOverdueAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<RecurringTransaction> { first, second });
+
+        var runLock = new FakeRunLock { HeldChecksBeforeLoss = 1 };
+        await CreateService(context, mockRepo.Object, runLock).RunAsync();
+
+        context.Transactions.Should().ContainSingle()
+            .Which.RecurringTransactionId.Should().Be(first.Id, "the run stops once the lock is gone");
+        second.NextOccurrenceDate.Should().BeBefore(DateTime.UtcNow, "the second template is left overdue for the next run");
+        runLock.Released.Should().BeTrue("the release still runs, and must tolerate a lock it no longer holds");
+    }
+
+    [Fact]
     public async Task RunAsync_WhenLockNotAcquired_DoesNotReleaseIt()
     {
         // Releasing an applock this session does not own raises an error in SQL Server,

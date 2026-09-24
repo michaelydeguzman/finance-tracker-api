@@ -10,9 +10,10 @@ namespace FinanceTracker.API.Authentication
     /// <summary>
     /// Restricts an endpoint to the trusted front end, by way of a shared secret header.
     ///
-    /// Applied to the external-login exchange, which mints a session from a provider subject
-    /// the front end has already verified. Any caller able to reach it can impersonate any
-    /// user, so it must never be reachable from a browser.
+    /// Applied to the whole auth controller. The external-login exchange is the sharpest case:
+    /// it mints a session from a provider subject the front end has already verified, so any
+    /// caller able to reach it can impersonate any user. The rest need it because who may sign
+    /// up is decided in the front end, and the API's own address is public.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
     public sealed class BffOnlyAttribute : Attribute, IAsyncAuthorizationFilter

@@ -159,6 +159,22 @@ public sealed class AuthService : IAuthService
                     "This email already has an account and the provider has not verified the address.");
             }
 
+            if (existing.EmailVerifiedAt is null)
+            {
+                // Nobody has proved this address until now, so every way in that already
+                // exists was set up by someone unproven — possibly a stranger who registered
+                // the owner's address before the owner arrived. Adopting the account with
+                // those intact would hand the owner an account that stranger can still sign
+                // in to. The provider is the first proof, so it becomes the only way in: the
+                // password and every other identity go (the identity rows too — a leftover
+                // Password row would collide with the one a later reset adds), and so does
+                // every session they opened.
+                existing.Credential = null;
+                existing.Identities.Clear();
+                await _users.ConsumeOutstandingTokensAsync(existing.Id, UserTokenPurpose.RefreshToken, cancellationToken);
+                await _users.ConsumeOutstandingTokensAsync(existing.Id, UserTokenPurpose.MagicLink, cancellationToken);
+            }
+
             await _users.AddIdentityAsync(new UserIdentity
             {
                 Id = Guid.NewGuid(),

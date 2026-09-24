@@ -18,5 +18,9 @@ FROM mcr.microsoft.com/dotnet/runtime:8.0
 WORKDIR /app
 COPY --from=build /app .
 
+# The commit this image was built from; the deploy pipeline passes it in.
+ARG SOURCE_SHA=
+ENV SOURCE_SHA=$SOURCE_SHA
+
 USER $APP_UID
 ENTRYPOINT ["dotnet", "FinanceTracker.Worker.dll"]

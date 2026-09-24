@@ -71,13 +71,16 @@ use, so a replay fails — which is the signature of a stolen token.
 
 ### Endpoints
 
-All under `/api/v1/auth`, all behind a fixed-window per-address rate limit.
+All under `/api/v1/auth`, all behind a fixed-window per-address rate limit, and **all
+BFF-only** (the `X-Bff-Secret` header, `[BffOnly]` on the controller). The API's address is
+public once deployed, and who may sign up is decided in the front end (`AUTH_SIGNUP_MODE`), so
+an auth endpoint that answered direct callers would let anyone register past it.
 
 | Endpoint | Notes |
 |---|---|
 | `POST /register` | Always 202, whatever happened |
 | `POST /login` | One message for every failure mode |
-| `POST /exchange` | BFF-only, shared-secret header |
+| `POST /exchange` | Mints a session from a provider subject — the sharpest reason for the secret |
 | `POST /magic-link/request` · `/consume` | |
 | `POST /password-reset/request` · `/confirm` | |
 | `POST /verify-email` · `/refresh` | |
@@ -93,6 +96,14 @@ known takeover path. The rule:
 
 Anyone able to register at a provider claiming an address would otherwise inherit the
 financial records behind it.
+
+The mirror image is **pre-hijacking**: a stranger registers the owner's address with a password
+of their own before the owner ever signs up. Nobody has verified that account, so when the
+owner later arrives through a provider that vouches for the address, linking adopts it — and
+the stranger's password would still open it. So adopting an *unverified* account removes every
+earlier way in (the password, every other identity) and ends every session they opened; the
+provider that proved the address becomes the only one. An account the owner had already
+verified keeps its password.
 
 ### Enumeration resistance
 
@@ -288,6 +299,7 @@ Two things to carry into that work:
   With sign-up, new users get their own empty tenant instead — but keeping the allowlist as an
   optional closed-beta switch is a useful kill-switch during rollout.
 
-Beyond that: the worker still runs from Windows Task Scheduler, which is fine for one machine
-and a single point of failure for a product. And recurring transactions — the feature this
+Beyond that: the worker ran from Windows Task Scheduler, which was fine for one machine and a
+single point of failure for a product. It now runs as a scheduled Azure Container Apps Job
+(`DEPLOYMENT.md`). And recurring transactions — the feature this
 started as — is now unblocked, and naturally per-user.

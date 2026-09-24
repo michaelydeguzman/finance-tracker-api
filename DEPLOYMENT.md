@@ -1,8 +1,10 @@
 # Deployment
 
 How Finance Tracker runs in production, and the one-time steps to stand it up. Sized for a
-closed test by a couple of people first — sign-up stays on the UI's allowlist — on free tiers,
-in Canada Central. Opening it to everyone later is a configuration change, not a move.
+closed test by a couple of people first, on free tiers, in Canada Central. Sign-up stays
+closed: the API answers auth calls only from the UI's server (the `X-Bff-Secret` header), so
+the UI's `AUTH_SIGNUP_MODE=allowlist` decides who gets in. Opening it to everyone later is a
+configuration change, not a move.
 
 | Piece | Runs on | Cost at this size |
 |---|---|---|
@@ -17,16 +19,27 @@ CLAUDE.md's data-safety section applies to it exactly as it does to the local on
 
 ## One-time setup
 
-Run the `az` blocks in **Azure Cloud Shell (Bash)** — it is already signed in and has the CLI.
-The data copy in step 2 runs on your own machine, because that is where the local database is.
+Run the `az` blocks in **Azure Cloud Shell (Bash)**, choosing **No storage account required**
+when it asks: it is already signed in, has the CLI, and keeps no files or history once the
+session ends. The data copy in step 2 runs on your own machine, because that is where the
+local database is.
 
-Set these once per Cloud Shell session:
+Set these at the start of each Cloud Shell session. `read -rs` takes each secret without
+echoing it or writing it to shell history; nothing below puts a secret on a command line.
 
 ```bash
 RG=rg-finance-tracker
 LOC=canadacentral
 SQL=sql-finance-tracker-<something unique>   # becomes <name>.database.windows.net
 GH_USER=<your GitHub username, lowercase>   # image paths on ghcr.io are lowercase
+
+read -rsp "SQL admin password: " ADMIN_PW; echo
+read -rsp "SQL app password: " APP_PW; echo
+read -rsp "JWT signing key: " JWT_KEY; echo
+read -rsp "BFF shared secret: " BFF_SECRET; echo
+read -rsp "GitHub read:packages token: " GHCR_TOKEN; echo
+
+APP_CONN="Server=tcp:$SQL.database.windows.net,1433;Initial Catalog=financetracker;User ID=ft_app;Password=$APP_PW;Encrypt=True;TrustServerCertificate=False;Connect Timeout=60;"
 ```
 
 ### 0. Before you start
@@ -36,18 +49,21 @@ GH_USER=<your GitHub username, lowercase>   # image paths on ghcr.io are lowerca
   Its `deploy` job is skipped until step 5 — that is expected, not a failure.
 - **A GitHub classic personal access token with only `read:packages`.** Container Apps uses
   it to pull the private images. (Fine-grained tokens do not cover packages.)
-- **Generate the secrets** (`openssl rand -base64 48` in Cloud Shell, once each):
-  the JWT signing key, the BFF shared secret (the same value goes to Vercel as
-  `API_BFF_SECRET`), and two SQL passwords — one for the server admin, one for the app.
-  Keep them in a password manager; nothing here writes them to a file.
-- **A budget alert.** Portal → Cost Management → Budgets → a $5 monthly budget emailing you.
-  Everything below should cost nothing; this is how you find out if it doesn't.
+- **Generate the secrets** (`openssl rand -base64 48` in Cloud Shell, once each): the JWT
+  signing key, the BFF shared secret (the same value goes to Vercel as `API_BFF_SECRET`), and
+  two SQL passwords — one for the server admin, one for the app. Keep them in a password
+  manager.
+- **Two budget alerts.** Portal → Cost Management → Budgets → a monthly budget with alerts at
+  $1 and $5. Everything below should cost nothing, and the database cannot bill (see step 1);
+  this is how you find out if something else does. A budget only emails — it never stops
+  anything — and the email can lag by up to a day.
 
 ### 1. Resource group and database
 
 Find your local database's collation first, and create the Azure one with the same. Category
 names are unique per `(UserId, CategoryType, Name)` *under the database's collation* (see
-CLAUDE.md, Households) — a different collation would change what counts as a duplicate.
+CLAUDE.md, Households), and EF's migrations name no collation, so every column takes the
+database default — a different one would change what counts as a duplicate.
 
 ```sql
 -- Against your LOCAL database
@@ -58,13 +74,18 @@ SELECT DATABASEPROPERTYEX(DB_NAME(), 'Collation');
 az group create -n $RG -l $LOC
 
 az sql server create -g $RG -n $SQL -l $LOC \
-  --admin-user ftadmin --admin-password '<admin password>'
+  --admin-user ftadmin --admin-password "$ADMIN_PW"
 
-# --use-free-limit is the free offer. BillOverUsage keeps the app up if a month ever runs
-# over, rather than pausing the database until the 1st; set it now, at creation.
+# --use-free-limit is the free offer. AutoPause is a hard $0 ceiling: if a month ever uses up
+# the free allowance, the database pauses until the 1st rather than billing. It can later be
+# switched to BillOverUsage (the app stays up and the excess is billed) — but BillOverUsage
+# can never be switched back, so it waits until sign-up opens.
+#
+# --auto-pause-delay 15 is the minimum: every wake-up is billed until the delay runs out.
 az sql db create -g $RG -s $SQL -n financetracker \
   --edition GeneralPurpose --compute-model Serverless --family Gen5 --capacity 2 \
-  --use-free-limit --free-limit-exhaustion-behavior BillOverUsage \
+  --use-free-limit --free-limit-exhaustion-behavior AutoPause \
+  --auto-pause-delay 15 \
   --collation '<collation from the query above>'
 
 # Container Apps has no fixed outbound address, so it connects as "an Azure service".
@@ -74,45 +95,81 @@ az sql server firewall-rule create -g $RG -s $SQL -n AllowAzureServices \
 ```
 
 Then in the portal, on the SQL server's **Networking** page, choose **Add your client IPv4
-address** so your own machine can reach it for step 2 and for future migrations.
+address** so your own machine can reach it for step 2 and for future migrations. The
+database's overview page should show this month's remaining free amount — that is how you
+know the free offer, not the free account's 12-month SQL deal, is the one applied.
 
 ### 2. Copy your records (on your machine)
 
-1. **Stop everything that writes locally**: the API, and the Windows Task Scheduler task
-   that runs the worker. An export taken mid-write is an inconsistent copy.
+The commands here carry passwords, and shells can keep them in a history file. Recent
+PowerShell 7 versions skip saving lines that look like they hold a password; others may not.
+Check yours, and remove those lines afterwards.
+
+1. **Stop everything that writes locally, for good.** *Disable* (not just stop) the Windows
+   Task Scheduler task that runs the worker — a stopped task still fires on its next trigger —
+   and stop the local API. From here on, enter nothing locally: it would never reach Azure.
 2. **Confirm the local database is fully migrated** — the export carries its schema and
    `__EFMigrationsHistory` with it, so this is also what the cloud database will be at:
    ```bash
    dotnet ef migrations list --project FinanceTracker.Infrastructure --startup-project FinanceTracker
    ```
    Nothing should be marked `(Pending)`.
-3. **Export** with SqlPackage (`dotnet tool install -g microsoft.sqlpackage`). Write the file
+3. **Take a backup, then freeze the database.** An export is not a transactional snapshot: it
+   reads table by table, and a write landing mid-export (the worker advancing a template, say)
+   can produce a copy that row counts will not catch. Read-only makes that impossible. The
+   backup is also your long-term copy — Azure's automatic backups only reach back about a week.
+   ```sql
+   -- Against your LOCAL database. The .bak lands in SQL Server's default backup folder;
+   -- it is every record you have, so keep it somewhere private.
+   BACKUP DATABASE [<local database name>] TO DISK = N'financetracker-pre-cloud.bak' WITH COPY_ONLY, CHECKSUM;
+   ALTER DATABASE [<local database name>] SET READ_ONLY WITH ROLLBACK IMMEDIATE;
+   ```
+4. **Export** with SqlPackage (`dotnet tool install -g microsoft.sqlpackage`). Write the file
    **outside the repository** — it is every record you have. (`*.bacpac` is git- and
    docker-ignored as a backstop, not as the plan.)
    ```
    sqlpackage /Action:Export /SourceConnectionString:"<local connection string>" /TargetFile:"C:\temp\financetracker.bacpac"
    ```
    The local connection string is the one in `dotnet user-secrets list --project FinanceTracker/FinanceTracker.API.csproj`.
-4. **Import** into the database created in step 1. Importing into that existing, empty
+5. **Import** into the database created in step 1. Importing into that existing, empty
    database is what keeps the free offer — letting the import create its own would make a
    paid one.
    ```
    sqlpackage /Action:Import /SourceFile:"C:\temp\financetracker.bacpac" /TargetConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=financetracker;User ID=ftadmin;Password=<admin password>;Encrypt=True;Connect Timeout=60;"
    ```
-5. **Verify** by running this read-only query against both databases and comparing:
+6. **Verify.** Run all of these against **both** databases; every result should match.
    ```sql
-   SELECT t.name, SUM(p.rows) AS [rows]
-   FROM sys.tables t
-   JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0, 1)
-   GROUP BY t.name ORDER BY t.name;
+   -- Exact row count of every table (sys.partitions only approximates). Needs SQL Server 2017+.
+   DECLARE @sql nvarchar(max) = (
+       SELECT STRING_AGG(CAST(N'SELECT N''' + name + N''' AS [table], COUNT_BIG(*) AS [rows] FROM '
+               + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) AS nvarchar(max)), N' UNION ALL ')
+       FROM sys.tables) + N' ORDER BY [table];';
+   EXEC sp_executesql @sql;
+
+   -- The money itself, per person.
+   SELECT UserId, COUNT_BIG(*) AS [transactions], SUM(Amount) AS [total]
+   FROM Transactions GROUP BY UserId ORDER BY UserId;
+
+   -- Where every recurring template is up to; a half-copied worker run shows here.
+   SELECT COUNT_BIG(*) AS [templates],
+          CHECKSUM_AGG(BINARY_CHECKSUM(Id, NextOccurrenceDate, Status)) AS [state]
+   FROM RecurringTransactions;
+
+   -- Schema version and the collation category uniqueness depends on.
+   SELECT (SELECT TOP 1 MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId DESC) AS [latest_migration],
+          DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS [database_collation],
+          (SELECT collation_name FROM sys.columns
+           WHERE object_id = OBJECT_ID('Categories') AND name = 'Name') AS [category_name_collation];
    ```
-6. **Delete the `.bacpac`** once the counts match.
+7. **Delete the `.bacpac`** once everything matches — with Shift+Delete, or empty the Recycle
+   Bin afterwards. Keep the `.bak` from step 3.
 
 ### 3. A login for the app
 
 The server admin can alter and drop anything; the API and worker only ever read and write
 rows (migrations are applied by hand, as the admin). Give them a login that can do only that.
-Run in the portal's **Query editor** on `financetracker`, signed in as `ftadmin`:
+Run in the portal's **Query editor** on `financetracker`, signed in as `ftadmin`, with the app
+password in place of the placeholder:
 
 ```sql
 CREATE USER ft_app WITH PASSWORD = '<app password>';
@@ -120,15 +177,9 @@ ALTER ROLE db_datareader ADD MEMBER ft_app;
 ALTER ROLE db_datawriter ADD MEMBER ft_app;
 ```
 
-The **app connection string** used below is then:
-
-```
-Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=financetracker;User ID=ft_app;Password=<app password>;Encrypt=True;TrustServerCertificate=False;Connect Timeout=60;
-```
-
-`Connect Timeout=60` and the retrying execution strategy in `Program.cs` are both there for
-the same reason: the first connection after the database has auto-paused waits while it
-resumes.
+`$APP_CONN` (set at the top) is this login's connection string. Its `Connect Timeout=60` and
+the retrying execution strategy in `Program.cs` are both there for the same reason: the first
+connection after the database has auto-paused waits while it resumes.
 
 ### 4. API and worker
 
@@ -141,12 +192,12 @@ az containerapp env create -g $RG -n cae-finance-tracker -l $LOC
 
 az containerapp create -g $RG -n ca-finance-tracker-api --environment cae-finance-tracker \
   --image ghcr.io/$GH_USER/finance-tracker-api:main \
-  --registry-server ghcr.io --registry-username $GH_USER --registry-password '<read:packages token>' \
+  --registry-server ghcr.io --registry-username $GH_USER --registry-password "$GHCR_TOKEN" \
   --ingress external --target-port 8080 \
   --min-replicas 0 --max-replicas 1 --cpu 0.25 --memory 0.5Gi \
-  --secrets "db-connection=<app connection string>" \
-            "jwt-signing-key=<JWT signing key>" \
-            "bff-shared-secret=<BFF shared secret>" \
+  --secrets "db-connection=$APP_CONN" \
+            "jwt-signing-key=$JWT_KEY" \
+            "bff-shared-secret=$BFF_SECRET" \
   --env-vars ConnectionStrings__FinanceTrackerDB=secretref:db-connection \
              Jwt__SigningKey=secretref:jwt-signing-key \
              Auth__BffSharedSecret=secretref:bff-shared-secret \
@@ -158,14 +209,15 @@ az containerapp job create -g $RG -n caj-finance-tracker-worker --environment ca
   --trigger-type Schedule --cron-expression "0 12 * * *" \
   --replica-timeout 1800 --replica-retry-limit 1 --parallelism 1 --replica-completion-count 1 \
   --image ghcr.io/$GH_USER/finance-tracker-worker:main \
-  --registry-server ghcr.io --registry-username $GH_USER --registry-password '<read:packages token>' \
+  --registry-server ghcr.io --registry-username $GH_USER --registry-password "$GHCR_TOKEN" \
   --cpu 0.25 --memory 0.5Gi \
-  --secrets "db-connection=<app connection string>" \
+  --secrets "db-connection=$APP_CONN" \
   --env-vars ConnectionStrings__FinanceTrackerDB=secretref:db-connection
 ```
 
-Check the API: `curl https://$(az containerapp show -g $RG -n ca-finance-tracker-api --query properties.configuration.ingress.fqdn -o tsv)/healthz`
-should answer `Healthy`. Run the worker once by hand with
+Check the API: `curl -i https://$(az containerapp show -g $RG -n ca-finance-tracker-api --query properties.configuration.ingress.fqdn -o tsv)/healthz`
+should answer `Healthy`, with the commit it was built from in `X-Source-Sha`. Run the worker
+once by hand — at any time except around its scheduled 12:00 UTC run — with
 `az containerapp job start -g $RG -n caj-finance-tracker-worker` and look at
 `az containerapp job execution list -g $RG -n caj-finance-tracker-worker -o table`.
 
@@ -179,9 +231,11 @@ Why these settings:
   every limit. One replica is also a ceiling on the bill.
 - **`--min-replicas 0`** — scale to zero. The first request after a quiet spell takes a few
   seconds to start the API, and longer if the database has paused too.
-- **Email is `Logging`** while it is just the two of you, so nothing is mailed. Signing in
-  with Google marks the address as confirmed (which households need), and a household
-  invitation appears on the invitee's households page whether or not it is emailed.
+- **Email is `Logging`** while it is just the two of you, so nothing is mailed — and the log
+  records only who a message was for and its subject, never the body, because the bodies are
+  live sign-in and reset links. Signing in with Google marks the address as confirmed (which
+  households need), and a household invitation appears on the invitee's households page
+  whether or not it is emailed.
 
 ### 5. Deploy on merge
 
@@ -214,6 +268,10 @@ Add those three as **repository variables** (Settings → Secrets and variables 
 Variables). They are identifiers, not secrets. From then on every merge to `main` that passes
 CI is deployed; run the Deploy workflow by hand to redeploy.
 
+The workflow deploys a commit only while it is still the tip of `main`, so a late or re-run CI
+of an older commit cannot roll production back. Its smoke test waits until `/healthz` reports
+the new commit, so it fails if the new revision never starts rather than passing on the old one.
+
 ### 6. Front end (Vercel)
 
 1. Import `finance-tracker-ui` into Vercel. Its `vercel.json` pins functions to Montréal, so
@@ -242,42 +300,58 @@ CI is deployed; run the Deploy workflow by hand to redeploy.
 
 ### 7. Cut over
 
-- **Leave the local worker's scheduled task disabled** (step 2 stopped it). The Container
-  Apps Job does its work now.
+- **Leave the local worker's scheduled task disabled.** The Container Apps Job does its work
+  now.
 - **The Azure database is now the one that matters.** The local copy is a snapshot as of the
-  export; it still holds real records, so keep treating it that way, but new entries go to
-  the cloud from here on.
+  export; it still holds real records, so keep treating it that way. Leaving it `READ_ONLY`
+  (step 3) is the simplest way to make sure nothing is entered there by mistake;
+  `ALTER DATABASE [<local database name>] SET READ_WRITE;` undoes it when you need to develop
+  against it.
 
 ## Shipping changes
 
 - **Merge to `main`.** CI tests it; the Deploy workflow then builds both images, points the
-  API and the worker at them, and checks `/healthz`.
+  API and the worker at them, and waits for `/healthz` to report the new commit.
 - **A change with a migration is migrated by hand before it is merged**, from your machine,
-  as the admin:
+  as the admin. The running version serves against the new schema until the merge deploys,
+  so:
+  - **Apply only from the final commit** that will be merged. A migration applied from a
+    branch that is later revised or abandoned leaves production with a schema `main` does not
+    know about.
+  - **Read the SQL first**:
+    `dotnet ef migrations script --idempotent --project FinanceTracker.Infrastructure --startup-project FinanceTracker`.
+  - **New columns must be nullable or have a default.** A `NOT NULL` column without one breaks
+    every insert the running API and worker make until the deploy lands.
+  - **Back up first** when a migration transforms existing values rather than only adding —
+    the date/time rework will be one of those.
   ```bash
   dotnet ef database update --project FinanceTracker.Infrastructure --startup-project FinanceTracker \
     --connection "<admin connection string>"
   ```
-  The running version keeps serving against the new schema until the merge deploys, so
-  prefer migrations that only add. Never from a cloud or remote session.
+  Never from a cloud or remote session.
 
 ## Keeping it free
 
 - **The database is billed for every second it is awake**, and each wake-up keeps it awake
-  until its auto-pause delay passes. The worker's daily run is one wake-up a day before
-  anyone signs in. Set the auto-pause delay to the portal's minimum, and consider moving
+  until its auto-pause delay (15 minutes) passes. The free allowance is roughly 55 hours awake
+  a month; the worker's daily run uses about 8 of them before anyone signs in. Consider moving
   the cron to a time you would be using the app anyway.
+- **With AutoPause, running out means the app is down until the 1st**, not a bill. The
+  database's overview page shows how much of the month's allowance is left.
 - **Any cron time from 08:00 to 23:59 UTC is the same calendar date everywhere in Canada.**
   Outside that window a run happens on the previous local evening, so a recurring transaction
   dated the 1st shows up the night before. (Scheduling across time zones properly is part of
   the date/time work, not this.)
-- **`/healthz` never touches the database** — `HealthEndpointIntegrationTests` fails if it
-  starts to. A health check that queried it would keep it from ever pausing.
+- **`/healthz` never touches the database** for the anonymous callers that poll it —
+  `HealthEndpointIntegrationTests` fails if it starts to. A health check that queried it would
+  keep it from ever pausing.
 
 ## Before opening sign-up
 
 This setup is right for a closed test and deliberately incomplete for strangers:
 
+- **Billing** — switch the database to `BillOverUsage` so running out of free allowance no
+  longer takes the app down. That switch is one-way.
 - **Email** — a domain and Resend (`Email__Provider=Resend`); password reset and magic links
   need it.
 - **Rate limits are per BFF, not per person.** The API partitions them by client address, and
@@ -286,6 +360,7 @@ This setup is right for a closed test and deliberately incomplete for strangers:
   another's history with no undo.
 - **Dates** — the dashboard turns its local date ranges into UTC instants and compares them
   with calendar dates, so for anyone outside UTC a range is off by a day.
-- **SQL by managed identity** instead of a password, and a staging database to rehearse
-  migrations on.
+- **SQL by managed identity** instead of a password, a narrower role than Contributor for the
+  deploy identity (Contributor can read the Container App's secrets), and a staging database
+  to rehearse migrations on.
 - **Vercel Hobby is non-commercial** — Pro, or the UI on Container Apps too, if that changes.

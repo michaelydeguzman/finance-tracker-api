@@ -18,6 +18,10 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=build /app .
 
+# The commit this image was built from; the deploy pipeline passes it in.
+ARG SOURCE_SHA=
+ENV SOURCE_SHA=$SOURCE_SHA
+
 # The base image's non-root user. It listens on 8080 (ASPNETCORE_HTTP_PORTS); TLS ends at
 # the platform's ingress, which forwards plain HTTP.
 USER $APP_UID

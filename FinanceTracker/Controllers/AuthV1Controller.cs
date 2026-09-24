@@ -25,6 +25,10 @@ namespace FinanceTracker.API.Controllers;
 [ApiController]
 [Route("api/v{version:apiVersion}/auth")]
 [EnableRateLimiting(RateLimitPolicies.Auth)]
+// Every action, not just exchange. The API has a public address, but who may sign up is
+// decided in the front end (AUTH_SIGNUP_MODE and its allowlist). Answering direct callers
+// would let anyone register past that — or claim an address before its owner arrives.
+[BffOnly]
 public class AuthV1Controller : ControllerBase
 {
     /// <summary>
@@ -74,7 +78,6 @@ public class AuthV1Controller : ControllerBase
     }
 
     [HttpPost("exchange")]
-    [BffOnly]
     public async Task<ActionResult<ApiResponseDto<AuthResultDto>>> Exchange(
         [FromBody] ExternalLoginRequestDto dto,
         CancellationToken cancellationToken = default)

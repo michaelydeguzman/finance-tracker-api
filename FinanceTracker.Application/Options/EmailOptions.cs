@@ -14,6 +14,14 @@ public sealed class EmailOptions
 
     public EmailProvider Provider { get; set; } = EmailProvider.Logging;
 
+    /// <summary>
+    /// Whether the logging provider writes message bodies. Off by default: the bodies are
+    /// sign-in, reset and verification links — live credentials — and a deployed log is
+    /// readable by far more people and tools than the addressee's inbox. Turn it on only
+    /// locally, to follow a link without a mail catcher.
+    /// </summary>
+    public bool LogBodies { get; set; }
+
     public string FromAddress { get; set; } = "no-reply@localhost";
 
     public string FromName { get; set; } = "Finance Tracker";

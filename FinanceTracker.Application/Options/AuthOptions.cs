@@ -41,4 +41,10 @@ public sealed class AuthOptions
     /// can raise it rather than being throttled by a rule it is not testing.
     /// </summary>
     public int HouseholdInvitesPerMinute { get; set; } = 10;
+
+    /// <summary>
+    /// Auth requests (sign-in, registration, links, refresh) allowed per client address per
+    /// minute. Configurable for the same reason as <see cref="HouseholdInvitesPerMinute"/>.
+    /// </summary>
+    public int AuthRequestsPerMinute { get; set; } = 10;
 }
