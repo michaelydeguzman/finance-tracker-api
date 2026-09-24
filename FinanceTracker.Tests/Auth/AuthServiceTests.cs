@@ -202,7 +202,7 @@ public class AuthServiceTests
         // address before the provider did.
         using var h = new AuthServiceHarness();
         await h.Service.RegisterAsync(Registration());
-        await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = h.LastEmailedToken() });
+        await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = h.LastEmailedToken(), Password = Password });
         var existingId = (await h.Context.Users.SingleAsync()).Id;
 
         var result = await h.Service.ExchangeExternalLoginAsync(External(verified: true));
@@ -282,6 +282,126 @@ public class AuthServiceTests
         reset.Should().BeTrue();
         (await h.Service.LoginAsync(new LoginRequestDto { Email = Email, Password = "the owner's own new password" }))
             .Should().NotBeNull();
+    }
+
+    // --- Pre-hijacking through the other first proofs of an address ---
+    //
+    // Google sign-in is one way an owner first proves their address. A magic link, a password
+    // reset and the confirmation email are the others, and each has to settle the same
+    // question: whatever existed before that proof was set up by someone unproven.
+
+    [Fact]
+    public async Task MagicLink_OnAnUnverifiedAccount_RevokesTheStrangersPassword()
+    {
+        using var h = new AuthServiceHarness();
+        await h.Service.RegisterAsync(Registration());
+        var strangersSession = await h.Service.LoginAsync(
+            new LoginRequestDto { Email = Email, Password = Password });
+
+        await h.Service.RequestMagicLinkAsync(new EmailOnlyRequestDto { Email = Email });
+        var ownersSession = await h.Service.ConsumeMagicLinkAsync(new TokenRequestDto { Token = h.LastEmailedToken() });
+
+        ownersSession.Should().NotBeNull();
+        (await h.Service.LoginAsync(new LoginRequestDto { Email = Email, Password = Password }))
+            .Should().BeNull("the password predates the first proof of the address");
+        (await h.Service.RefreshAsync(new TokenRequestDto { Token = strangersSession!.RefreshToken }))
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public async Task MagicLink_OnAVerifiedAccount_KeepsItsPassword()
+    {
+        // Only the first proof settles ownership. An owner who confirmed their address and
+        // later signs in by link must not lose the password they chose.
+        using var h = new AuthServiceHarness();
+        await h.Service.RegisterAsync(Registration());
+        await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = h.LastEmailedToken(), Password = Password });
+
+        await h.Service.RequestMagicLinkAsync(new EmailOnlyRequestDto { Email = Email });
+        await h.Service.ConsumeMagicLinkAsync(new TokenRequestDto { Token = h.LastEmailedToken() });
+
+        (await h.Service.LoginAsync(new LoginRequestDto { Email = Email, Password = Password }))
+            .Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task PasswordReset_OnAnUnverifiedAccount_RevokesEveryOtherWayIn()
+    {
+        // A reset already replaces the password. What it used to leave behind is every other
+        // identity — here one a stranger created through a provider that did not vouch for
+        // the address, which would have kept working after the owner took the account back.
+        using var h = new AuthServiceHarness();
+        var strangersIdentity = new ExternalLoginRequestDto
+        {
+            Provider = IdentityProvider.GitHub,
+            ProviderSubject = "strangers-github",
+            Email = Email,
+            EmailVerified = false
+        };
+        await h.Service.ExchangeExternalLoginAsync(strangersIdentity);
+
+        await h.Service.RequestPasswordResetAsync(new EmailOnlyRequestDto { Email = Email });
+        (await h.Service.ResetPasswordAsync(new ResetPasswordRequestDto
+        {
+            Token = h.LastEmailedToken(),
+            NewPassword = "the owner's own new password"
+        })).Should().BeTrue();
+
+        var act = () => h.Service.ExchangeExternalLoginAsync(strangersIdentity);
+        await act.Should().ThrowAsync<AccountLinkingConflictException>(
+            "the stranger's identity was removed, and an unverified provider cannot re-link");
+        (await h.Service.LoginAsync(new LoginRequestDto { Email = Email, Password = "the owner's own new password" }))
+            .Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task VerifyEmail_WithoutThePasswordChosenAtSignUp_ConfirmsNothing()
+    {
+        // The confirmation email goes to the address's owner, but the password was chosen by
+        // whoever registered. Clicking alone would let an owner who never signed up vouch for
+        // a stranger's password without knowing it.
+        using var h = new AuthServiceHarness();
+        await h.Service.RegisterAsync(Registration());
+
+        var confirmed = await h.Service.VerifyEmailAsync(
+            new VerifyEmailRequestDto { Token = h.LastEmailedToken(), Password = "not the password" });
+
+        confirmed.Should().BeFalse();
+        (await h.Context.Users.SingleAsync()).EmailVerifiedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task VerifyEmail_AfterAMistypedPassword_StillWorksWithTheRightOne()
+    {
+        // The link is spent only when it succeeds, so a typo does not cost the registrant it.
+        using var h = new AuthServiceHarness();
+        await h.Service.RegisterAsync(Registration());
+        var token = h.LastEmailedToken();
+
+        await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = token, Password = "a typo" });
+        var confirmed = await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = token, Password = Password });
+
+        confirmed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RequestEmailVerification_ForAnAccountWithNoPassword_SendsNothing()
+    {
+        // Confirming by link needs the account's password, so an account without one proves its
+        // address another way — a magic link or a provider that vouches for it — both of which
+        // revoke whatever came before.
+        using var h = new AuthServiceHarness();
+        await h.Service.ExchangeExternalLoginAsync(new ExternalLoginRequestDto
+        {
+            Provider = IdentityProvider.GitHub,
+            ProviderSubject = "github-subject",
+            Email = Email,
+            EmailVerified = false
+        });
+
+        await h.Service.RequestEmailVerificationAsync(new EmailOnlyRequestDto { Email = Email });
+
+        h.Email.Sent.Should().BeEmpty();
     }
 
     // --- Cancellation ---

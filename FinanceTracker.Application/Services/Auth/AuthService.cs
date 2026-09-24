@@ -159,21 +159,8 @@ public sealed class AuthService : IAuthService
                     "This email already has an account and the provider has not verified the address.");
             }
 
-            if (existing.EmailVerifiedAt is null)
-            {
-                // Nobody has proved this address until now, so every way in that already
-                // exists was set up by someone unproven — possibly a stranger who registered
-                // the owner's address before the owner arrived. Adopting the account with
-                // those intact would hand the owner an account that stranger can still sign
-                // in to. The provider is the first proof, so it becomes the only way in: the
-                // password and every other identity go (the identity rows too — a leftover
-                // Password row would collide with the one a later reset adds), and so does
-                // every session they opened.
-                existing.Credential = null;
-                existing.Identities.Clear();
-                await _users.ConsumeOutstandingTokensAsync(existing.Id, UserTokenPurpose.RefreshToken, cancellationToken);
-                await _users.ConsumeOutstandingTokensAsync(existing.Id, UserTokenPurpose.MagicLink, cancellationToken);
-            }
+            // The provider is the first proof, so it becomes the only way in.
+            await RevokeUnprovenAccessAsync(existing, cancellationToken);
 
             await _users.AddIdentityAsync(new UserIdentity
             {
@@ -250,7 +237,9 @@ public sealed class AuthService : IAuthService
         if (user is null)
             return null;
 
-        // Following a link sent to the address is itself proof of control over it.
+        // Following a link sent to the address is itself proof of control over it — and if it
+        // is the first proof, nothing set up before it can be trusted.
+        await RevokeUnprovenAccessAsync(user, cancellationToken);
         user.EmailVerifiedAt ??= DateTime.UtcNow;
 
         await _users.SaveChangesAsync(cancellationToken);
@@ -289,6 +278,11 @@ public sealed class AuthService : IAuthService
 
         if (user is null)
             return false;
+
+        // Replacing the password alone would leave any other way in a stranger set up before
+        // the address was proven. After this the account has no password, so the branch below
+        // gives it the owner's.
+        await RevokeUnprovenAccessAsync(user, cancellationToken);
 
         if (user.Credential is null)
         {
@@ -338,10 +332,14 @@ public sealed class AuthService : IAuthService
     {
         var user = await _users.GetByEmailAsync(Normalize(request.Email), cancellationToken);
 
-        // Unknown, disabled, or already confirmed: return quietly. The caller is told the
-        // same thing in every case, so none of those states can be read off the response.
-        if (user is null || user.Status != UserStatus.Active || user.EmailVerifiedAt is not null)
+        // Unknown, disabled, already confirmed, or with no password to confirm it with: return
+        // quietly. The caller is told the same thing in every case, so none of those states can
+        // be read off the response.
+        if (user is null || user.Status != UserStatus.Active || user.EmailVerifiedAt is not null
+            || user.Credential is null)
+        {
             return;
+        }
 
         var issued = _secretTokens.Issue(
             user.Id, UserTokenPurpose.EmailVerification, TimeSpan.FromHours(_authOptions.EmailVerificationHours));
@@ -360,13 +358,36 @@ public sealed class AuthService : IAuthService
             CancellationToken.None);
     }
 
-    public async Task<bool> VerifyEmailAsync(TokenRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<bool> VerifyEmailAsync(VerifyEmailRequestDto request, CancellationToken cancellationToken = default)
     {
-        var user = await ConsumeTokenAsync(request.Token, UserTokenPurpose.EmailVerification, cancellationToken);
-
-        if (user is null)
+        if (string.IsNullOrWhiteSpace(request.Token))
             return false;
 
+        var record = await _users.GetActiveTokenAsync(
+            _secretTokens.HashFor(request.Token), UserTokenPurpose.EmailVerification, cancellationToken);
+
+        if (record is null)
+            return false;
+
+        var user = await _users.GetByIdAsync(record.UserId, cancellationToken);
+
+        // The token proves whoever clicked controls the inbox — not that they chose this
+        // account's password. Registration sends this link to the address's owner whoever
+        // registered, so a click alone would let an owner who never signed up vouch for a
+        // stranger's password. Requiring it binds the two: only whoever chose the password can
+        // confirm the address for it. An account with no password proves its address another
+        // way (a magic link, or a provider that vouches), and those revoke what came before.
+        //
+        // Checked before the link is spent, so a typo does not cost the registrant it. Guessing
+        // is no threat: whoever holds the link controls the inbox, which is exactly who the
+        // account should belong to.
+        if (user?.Credential is null
+            || _passwords.Verify(user.Credential.PasswordHash, request.Password) == PasswordVerificationOutcome.Failed)
+        {
+            return false;
+        }
+
+        record.ConsumedAt = DateTime.UtcNow;
         user.EmailVerifiedAt ??= DateTime.UtcNow;
         await _users.SaveChangesAsync(cancellationToken);
         return true;
@@ -387,6 +408,30 @@ public sealed class AuthService : IAuthService
     /// Redeems a single-use token and returns its owner, or null when the token is unknown,
     /// already spent, or expired — the three are deliberately indistinguishable.
     /// </summary>
+    /// <summary>
+    /// Called wherever an address may be proven for the first time: a verified provider, a
+    /// magic link, a password reset. Does nothing for an account already verified.
+    ///
+    /// Until the address is proven, every way into the account was set up by someone unproven
+    /// — possibly a stranger who registered the owner's address before the owner arrived
+    /// (pre-hijacking). Whatever proves it first becomes the only way in, so everything before
+    /// it goes: the password, every identity (the rows too — a leftover Password row would
+    /// collide with the one a reset adds, on the unique (UserId, Provider) index), and every
+    /// session they opened. The caller then adds back only what its own proof establishes.
+    /// Confirming by the emailed link is not one of these callers: it requires the password
+    /// instead, because it cannot tell the registrant from the owner.
+    /// </summary>
+    private async Task RevokeUnprovenAccessAsync(User user, CancellationToken cancellationToken)
+    {
+        if (user.EmailVerifiedAt is not null)
+            return;
+
+        user.Credential = null;
+        user.Identities.Clear();
+        await _users.ConsumeOutstandingTokensAsync(user.Id, UserTokenPurpose.RefreshToken, cancellationToken);
+        await _users.ConsumeOutstandingTokensAsync(user.Id, UserTokenPurpose.MagicLink, cancellationToken);
+    }
+
     private async Task<User?> ConsumeTokenAsync(
         string plainText,
         UserTokenPurpose purpose,

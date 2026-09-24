@@ -159,7 +159,7 @@ public class AuthV1Controller : ControllerBase
 
     [HttpPost("verify-email")]
     public async Task<ActionResult<ApiResponseDto<object>>> VerifyEmail(
-        [FromBody] TokenRequestDto dto,
+        [FromBody] VerifyEmailRequestDto dto,
         CancellationToken cancellationToken = default)
     {
         var succeeded = await _sender.Send(new VerifyEmailCommand(dto), cancellationToken);

@@ -177,9 +177,9 @@ Check yours, and remove those lines afterwards.
           (SELECT collation_name FROM sys.columns
            WHERE object_id = OBJECT_ID('Categories') AND name = 'Name') AS [category_name_collation];
    ```
-7. **Check every account is verified.** Once live, the first Google sign-in to an account
-   nobody has verified removes its password and ends its sessions — the defence against a
-   stranger pre-registering someone's address. Email is not being sent yet, so a password lost
+7. **Check every account is verified.** Once live, the first Google sign-in, magic link or
+   password reset on an account nobody has verified removes its password and ends its
+   sessions — the defence against a stranger pre-registering someone's address. Email is not being sent yet, so a password lost
    that way cannot be reset. Run against Azure:
    ```sql
    SELECT u.Email, u.EmailVerifiedAt, i.Provider

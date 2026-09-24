@@ -98,12 +98,18 @@ Anyone able to register at a provider claiming an address would otherwise inheri
 financial records behind it.
 
 The mirror image is **pre-hijacking**: a stranger registers the owner's address with a password
-of their own before the owner ever signs up. Nobody has verified that account, so when the
-owner later arrives through a provider that vouches for the address, linking adopts it — and
-the stranger's password would still open it. So adopting an *unverified* account removes every
-earlier way in (the password, every other identity) and ends every session they opened; the
-provider that proved the address becomes the only one. An account the owner had already
-verified keeps its password.
+of their own (or through a provider that does not vouch for it) before the owner ever signs up.
+Nobody has verified that account, so the owner's first proof of the address has to settle who
+it belongs to. There are four such proofs, and each settles it:
+
+- **A provider that vouches, a magic link, a password reset** — whichever comes first removes
+  every earlier way in (the password, every identity) and ends every session they opened,
+  keeping only what that proof itself establishes (`RevokeUnprovenAccessAsync`). An account
+  already verified keeps everything.
+- **The confirmation email** — the one proof that cannot tell the owner from the registrant:
+  it goes to the owner whoever registered, and a click alone would vouch for a stranger's
+  password. So confirming takes the password chosen at sign-up too, checked before the link
+  is spent. An account with no password is never sent one; it proves its address another way.
 
 ### Enumeration resistance
 

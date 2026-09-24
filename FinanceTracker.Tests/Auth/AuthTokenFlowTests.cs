@@ -30,7 +30,7 @@ public class AuthTokenFlowTests
         using var h = await RegisteredAsync();
         var token = h.LastEmailedToken();
 
-        var succeeded = await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = token });
+        var succeeded = await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = token, Password = Password });
 
         succeeded.Should().BeTrue();
         (await h.Context.Users.SingleAsync()).EmailVerifiedAt.Should().NotBeNull();
@@ -41,9 +41,9 @@ public class AuthTokenFlowTests
     {
         using var h = await RegisteredAsync();
         var token = h.LastEmailedToken();
-        await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = token });
+        await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = token, Password = Password });
 
-        var replay = await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = token });
+        var replay = await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = token, Password = Password });
 
         replay.Should().BeFalse("these tokens are single use");
     }
@@ -58,7 +58,7 @@ public class AuthTokenFlowTests
         record.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
         await h.Context.SaveChangesAsync();
 
-        var succeeded = await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = token });
+        var succeeded = await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = token, Password = Password });
 
         succeeded.Should().BeFalse();
     }
@@ -71,7 +71,7 @@ public class AuthTokenFlowTests
     {
         using var h = await RegisteredAsync();
 
-        (await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = token })).Should().BeFalse();
+        (await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = token, Password = Password })).Should().BeFalse();
     }
 
     // --- Magic link ---
@@ -228,7 +228,7 @@ public class AuthTokenFlowTests
         await h.Service.RequestEmailVerificationAsync(new EmailOnlyRequestDto { Email = Email });
 
         var succeeded = await h.Service.VerifyEmailAsync(
-            new TokenRequestDto { Token = h.LastEmailedToken() });
+            new VerifyEmailRequestDto { Token = h.LastEmailedToken(), Password = Password });
 
         succeeded.Should().BeTrue();
     }
@@ -241,7 +241,7 @@ public class AuthTokenFlowTests
 
         await h.Service.RequestEmailVerificationAsync(new EmailOnlyRequestDto { Email = Email });
 
-        var replay = await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = original });
+        var replay = await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = original, Password = Password });
 
         replay.Should().BeFalse("a confirmation link that leaked must not outlive its replacement");
     }
@@ -262,7 +262,7 @@ public class AuthTokenFlowTests
     public async Task RequestEmailVerification_OnceAlreadyConfirmed_SendsNothing()
     {
         using var h = await RegisteredAsync();
-        await h.Service.VerifyEmailAsync(new TokenRequestDto { Token = h.LastEmailedToken() });
+        await h.Service.VerifyEmailAsync(new VerifyEmailRequestDto { Token = h.LastEmailedToken(), Password = Password });
         h.Email.Sent.Clear();
 
         await h.Service.RequestEmailVerificationAsync(new EmailOnlyRequestDto { Email = Email });
