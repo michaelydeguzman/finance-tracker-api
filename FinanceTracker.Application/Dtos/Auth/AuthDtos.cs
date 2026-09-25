@@ -48,6 +48,18 @@ public sealed class TokenRequestDto
     public string Token { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// Confirming an address takes the password chosen at sign-up as well as the emailed token.
+/// The token proves whoever clicked controls the inbox — not that they chose this account's
+/// password, which is the part a stranger who registered someone else's address controls.
+/// </summary>
+public sealed class VerifyEmailRequestDto
+{
+    public string Token { get; set; } = string.Empty;
+
+    public string Password { get; set; } = string.Empty;
+}
+
 public sealed class ResetPasswordRequestDto
 {
     public string Token { get; set; } = string.Empty;

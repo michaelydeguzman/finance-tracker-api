@@ -11,9 +11,19 @@ var host = Host.CreateDefaultBuilder(args)
     .ConfigureAppConfiguration(config => config.AddUserSecrets<Program>(optional: true))
     .ConfigureServices((context, services) =>
     {
+        // Retrying for the same reason as the API: a scheduled run is usually what wakes an
+        // auto-paused database, so its first connection is the one most likely to be refused.
+        //
+        // A retried save cannot duplicate a transaction. Keys are generated client-side when
+        // an entity is added, so a save that committed but lost its acknowledgement re-sends
+        // the same key and fails on the primary key. The run then logs that template as
+        // failed even though its rows and advanced date are already committed — so the next
+        // run finds nothing to redo. A "failed" template in the log is worth checking before
+        // re-entering anything by hand.
         services.AddDbContext<FinanceTrackerContext>(options =>
             options.UseSqlServer(
-                context.Configuration.GetConnectionString("FinanceTrackerDB")));
+                context.Configuration.GetConnectionString("FinanceTrackerDB"),
+                sql => sql.EnableRetryOnFailure()));
 
         // The worker has no signed-in user. Stated explicitly so the tenancy query filters
         // resolve to "no tenant" and every cross-tenant read has to opt in by name.

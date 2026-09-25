@@ -15,10 +15,10 @@ public static class AuthEmailFactory
             toAddress,
             "Confirm your email address",
             "Confirm your email address",
-            "Use the link below to confirm this address for your Finance Tracker account.",
+            "Use the link below to confirm this address for your Finance Tracker account. You will be asked for the password you chose when you signed up.",
             "Confirm email",
             link,
-            "If you did not create an account, you can ignore this message.");
+            "If you did not create an account, you can ignore this message: it cannot be confirmed without that password.");
 
     public static EmailMessage MagicLink(string toAddress, string link) =>
         Build(

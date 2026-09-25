@@ -11,7 +11,7 @@ ASP.NET Core 8 REST API for personal finance tracking. Clean Architecture, EF Co
 | `FinanceTracker.Domain/` | Entities, pure domain services, and the repository interfaces under `Repositories/`. Depends on nothing else. |
 | `FinanceTracker.Application/` | DTOs, MediatR commands/queries + handlers, service interfaces. |
 | `FinanceTracker.Infrastructure/` | `FinanceTrackerContext`, entity configurations, repository implementations, EF migrations. |
-| `FinanceTracker.Worker/` | Run-and-exit console app that materializes recurring transactions. Triggered by Windows Task Scheduler. |
+| `FinanceTracker.Worker/` | Run-and-exit console app that materializes recurring transactions. Runs daily as an Azure Container Apps Job (see `DEPLOYMENT.md`). |
 | `FinanceTracker.Tests/` | xunit + FluentAssertions + Moq. Unit, integration, and worker tests. |
 
 Dependencies point inward. `Domain` references nothing; `Application` and `Infrastructure` are
@@ -78,16 +78,57 @@ block. Do not add one, and never commit credentials — a previous commit had to
 
 ## Data safety — read before touching the database
 
-**The local database holds real personal financial records, not seed data.**
+**Both databases hold real personal financial records, not seed data** — the local one, and
+the Azure SQL database production runs on, which was copied from it (`DEPLOYMENT.md`).
 
-- Never run destructive or bulk-update SQL against it.
+- Never run destructive or bulk-update SQL against either.
 - *Generating* an EF migration is safe anywhere. **Applying** one
   (`dotnet ef database update`) is a deliberate, local, eyes-on operation. Never apply
-  migrations from a cloud or remote session — those have no route to this database and no
-  business mutating real data.
+  migrations from a cloud or remote session — those have no business mutating real data.
+  The deploy pipeline deliberately does not migrate either: a change that needs a migration
+  is applied to Azure by hand, from the owner's machine, *before* it is merged.
 - Tests never touch it. Integration tests swap in EF Core InMemory via
   `FinanceTracker.Tests/Integration/FinanceTrackerWebApplicationFactory.cs`, so the entire
   suite runs with no local infrastructure — including from a cloud session.
+
+## Production
+
+`DEPLOYMENT.md` is the runbook: Container Apps for the API and worker, a serverless Azure SQL
+database on the free offer, merges to `main` deployed by `.github/workflows/deploy.yml` once
+CI passes. Three things in the code exist because of that database, which auto-pauses when idle
+and is billed for every second it is awake:
+
+- **`/healthz` never touches the database** for the anonymous callers that poll it (a request
+  carrying a bearer token still passes through `HouseholdScopeMiddleware`, which does).
+  Anything that polls a database-backed check would keep the database from ever pausing.
+  `HealthEndpointIntegrationTests` points the API at a dead SQL Server and fails if `/healthz`
+  stops answering 200. It also returns the image's commit in `X-Source-Sha`, which is how the
+  deploy pipeline knows the new revision is the one answering.
+- **Both hosts use `EnableRetryOnFailure`**, because the first connection after a pause is
+  refused while the database resumes. A retrying strategy throws on a transaction begun by
+  user code, so anything that needs one must run inside `Database.CreateExecutionStrategy()`.
+  The worker's run lock opens its connection through that strategy for the same reason: it
+  is the first thing a scheduled run does, and a raw `OpenAsync` is not retried.
+- **The worker checks its run lock before every template.** `sp_getapplock` is
+  session-scoped, and EF reconnects after a dropped connection on a new session that does not
+  hold it — with nothing failing. A run that has lost the lock stops, and its remaining
+  templates stay overdue for the next run. Release is best-effort for the same reason.
+
+Three rules exist because the API has a public address:
+
+- **Every auth endpoint is BFF-only** — `[BffOnly]` sits on `AuthV1Controller` itself, not on
+  one action. Who may sign up is decided in the front end (`AUTH_SIGNUP_MODE`), so an auth
+  endpoint that answered direct callers would let anyone register past it, or claim an address
+  before its owner arrives. `AuthRateLimitIntegrationTests` asserts the filter is in every auth
+  endpoint's metadata, so a new action is covered without being listed anywhere.
+- **Refresh and exchange are exempt from the auth rate limit** (`[DisableRateLimiting]`). The
+  per-address bucket is shared by everyone — every call arrives from the front end's servers —
+  and anonymous account routes feed it, so a flood would otherwise sign every session out at
+  its next refresh. Neither needs the limit: both answer only the BFF, and neither takes
+  anything guessable.
+- **The logging email provider withholds bodies** unless `Email:LogBodies` is set. Those
+  bodies are live sign-in and reset links, and a deployment still on that provider ships its
+  log to a workspace. Turn it on only locally.
 
 ## Recurring transactions
 

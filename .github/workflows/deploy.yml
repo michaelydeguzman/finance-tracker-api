@@ -1,0 +1,151 @@
+name: Deploy
+
+# Ships main to Azure Container Apps — only a commit CI has already passed. It runs when the
+# CI workflow finishes on main and does nothing unless that run succeeded. See DEPLOYMENT.md.
+#
+# Migrations are deliberately NOT applied here. Applying one is a local, eyes-on operation
+# (CLAUDE.md), so a change that needs one is migrated by hand *before* it is merged.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# Nothing by default; each job asks for exactly what it uses. The Azure token in particular
+# is only mintable by the one job that deploys.
+permissions: {}
+
+# One deploy at a time, and never abandoned halfway: the API and the worker move together.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-financetracker-dev
+  API_APP: ca-finance-tracker-api
+  WORKER_JOB: caj-finance-tracker-worker
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  gate:
+    # workflow_run's branch filter matches a branch *name*, and a pull request from a fork
+    # can be named main. Only a push to this repository's own main may reach production.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      current: ${{ steps.tip.outputs.current }}
+
+    steps:
+      # Each CI completion deploys its own commit, and completions do not arrive in commit
+      # order: a re-run of an older commit's CI can finish after a newer commit shipped, and
+      # would roll production back — onto a schema a newer migration may already have changed.
+      - name: Deploy only the current tip of main
+        id: tip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$tip" = "$SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$SHA is no longer the tip of main ($tip); not deploying it."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  images:
+    needs: gate
+    if: needs.gate.outputs.current == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: finance-tracker-api
+            dockerfile: FinanceTracker/Dockerfile
+          - image: finance-tracker-worker
+            dockerfile: FinanceTracker.Worker/Dockerfile
+
+    steps:
+      # Third-party actions are pinned to a commit, not a tag: a tag can be moved, and these
+      # steps hold package-write rights.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+
+      # Registry paths must be lowercase; an owner name need not be.
+      - run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tagged with the commit, which is what a deploy pins, and with "main", which is what
+      # the one-time `az containerapp create` in DEPLOYMENT.md points at. SOURCE_SHA is what
+      # /healthz reports, so the smoke test below can tell which revision answered.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          build-args: SOURCE_SHA=${{ env.SHA }}
+          tags: |
+            ghcr.io/${{ env.OWNER }}/${{ matrix.image }}:${{ env.SHA }}
+            ghcr.io/${{ env.OWNER }}/${{ matrix.image }}:main
+
+  deploy:
+    needs: images
+    # Skipped, not failed, until the Azure side exists and these variables are set — so
+    # merging this before anything is provisioned still leaves main green.
+    if: vars.AZURE_CLIENT_ID != ''
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    steps:
+      - run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Point the API and the worker at this commit's images
+        run: |
+          az extension add --name containerapp --upgrade --only-show-errors
+          az containerapp update -g "$RESOURCE_GROUP" -n "$API_APP" \
+            --image "ghcr.io/$OWNER/finance-tracker-api:$SHA" --output none
+          az containerapp job update -g "$RESOURCE_GROUP" -n "$WORKER_JOB" \
+            --image "ghcr.io/$OWNER/finance-tracker-worker:$SHA" --output none
+
+      # Waits for /healthz to name this commit. Until the new revision is ready the old one
+      # keeps answering, so "healthy" alone would pass even if the new image never starts.
+      # /healthz never touches the database, so this wakes the API without waking SQL.
+      - name: Smoke-test the new revision
+        run: |
+          fqdn=$(az containerapp show -g "$RESOURCE_GROUP" -n "$API_APP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          for attempt in $(seq 1 30); do
+            served=$(curl --silent --max-time 30 --dump-header - --output /dev/null "https://$fqdn/healthz" \
+              | tr -d '\r' | awk -F': ' 'tolower($1) == "x-source-sha" { print $2 }')
+            if [ "$served" = "$SHA" ]; then
+              echo "The new revision is serving $SHA."
+              exit 0
+            fi
+            echo "Attempt $attempt: serving '${served:-nothing}', waiting for $SHA."
+            sleep 10
+          done
+          echo "::error::After 30 attempts the API is still not serving $SHA."
+          exit 1

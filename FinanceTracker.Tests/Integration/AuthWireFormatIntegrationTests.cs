@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text;
 using FinanceTracker.API.Authentication;
 using FluentAssertions;
@@ -86,6 +85,31 @@ public class AuthWireFormatIntegrationTests : IClassFixture<FinanceTrackerWebApp
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    /// <summary>
+    /// The API has a public address, and the sign-up allowlist lives in the front end. If any
+    /// of these answered a direct caller, anyone could register past the allowlist — or claim
+    /// an address before its owner arrives — without ever touching the front end.
+    /// </summary>
+    [Theory]
+    [InlineData("/api/v1/auth/register")]
+    [InlineData("/api/v1/auth/login")]
+    [InlineData("/api/v1/auth/exchange")]
+    [InlineData("/api/v1/auth/magic-link/request")]
+    [InlineData("/api/v1/auth/magic-link/consume")]
+    [InlineData("/api/v1/auth/password-reset/request")]
+    [InlineData("/api/v1/auth/password-reset/confirm")]
+    [InlineData("/api/v1/auth/verify-email/request")]
+    [InlineData("/api/v1/auth/verify-email")]
+    [InlineData("/api/v1/auth/refresh")]
+    public async Task EveryAuthEndpoint_RejectsACallerWithoutTheSharedSecret(string path)
+    {
+        var response = await _client.PostAsync(
+            path,
+            Json("""{"email":"direct@example.com","password":"a sufficiently long password","token":"t"}"""));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
     [Fact]
     public async Task Exchange_WithAWrongSharedSecret_IsRejected()
     {
@@ -121,9 +145,9 @@ public class AuthWireFormatIntegrationTests : IClassFixture<FinanceTrackerWebApp
     [Fact]
     public async Task Register_AcceptsTheFrontEndPayloadShape()
     {
-        var response = await _client.PostAsync(
+        var response = await _client.SendAsync(BffRequest(
             "/api/v1/auth/register",
-            Json("""
+            """
             {
               "email": "wire-format@example.com",
               "password": "a sufficiently long password",
@@ -137,13 +161,13 @@ public class AuthWireFormatIntegrationTests : IClassFixture<FinanceTrackerWebApp
     [Fact]
     public async Task Login_ReturnsTheFieldNamesTheFrontEndReads()
     {
-        await _client.PostAsync(
+        await _client.SendAsync(BffRequest(
             "/api/v1/auth/register",
-            Json("""{"email":"reader@example.com","password":"a sufficiently long password"}"""));
+            """{"email":"reader@example.com","password":"a sufficiently long password"}"""));
 
-        var response = await _client.PostAsJsonAsync(
+        var response = await _client.SendAsync(BffRequest(
             "/api/v1/auth/login",
-            new { email = "reader@example.com", password = "a sufficiently long password" });
+            """{"email":"reader@example.com","password":"a sufficiently long password"}"""));
 
         // Registration does not verify the address, and login does not require it, so this
         // should succeed and carry the exact camelCase keys ApiSession destructures.

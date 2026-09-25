@@ -15,7 +15,7 @@ Clean Architecture, EF Core against SQL Server, MediatR, URL-segment API version
 | `FinanceTracker.Domain/` | Entities, pure domain services, repository interfaces. Depends on nothing. |
 | `FinanceTracker.Application/` | DTOs, MediatR commands/queries and their handlers, service interfaces. |
 | `FinanceTracker.Infrastructure/` | `FinanceTrackerContext`, entity configurations, repository implementations, EF migrations. |
-| `FinanceTracker.Worker/` | Run-and-exit console app that expands due recurring templates. Triggered by Windows Task Scheduler. |
+| `FinanceTracker.Worker/` | Run-and-exit console app that expands due recurring templates. Runs daily as an Azure Container Apps Job (see `DEPLOYMENT.md`). |
 | `FinanceTracker.Tests/` | xunit + FluentAssertions + Moq — unit, integration, and worker tests. |
 
 Dependencies point inward. `Application` and `Infrastructure` are siblings that each reference
@@ -41,8 +41,8 @@ not add one.
 ```bash
 dotnet user-secrets set "ConnectionStrings:FinanceTrackerDB" "<your connection string>" --project FinanceTracker/FinanceTracker.API.csproj
 
-# Must match API_BFF_SECRET in the finance-tracker-ui checkout. It guards the SSO
-# exchange endpoint, so anything holding it can sign in as anyone.
+# Must match API_BFF_SECRET in the finance-tracker-ui checkout. Every auth endpoint
+# requires it; the SSO exchange mints sessions, so anything holding it can sign in as anyone.
 dotnet user-secrets set "Auth:BffSharedSecret" "<shared secret>" --project FinanceTracker/FinanceTracker.API.csproj
 ```
 

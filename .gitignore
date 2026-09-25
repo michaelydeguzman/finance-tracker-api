@@ -16,3 +16,6 @@ obj/
 # OS
 .DS_Store
 Thumbs.db
+
+# Database exports. A .bacpac is the whole database — every real financial record in it.
+*.bacpac

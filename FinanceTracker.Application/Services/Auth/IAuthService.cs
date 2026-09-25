@@ -43,7 +43,7 @@ public interface IAuthService
     /// </summary>
     Task RequestEmailVerificationAsync(EmailOnlyRequestDto request, CancellationToken cancellationToken = default);
 
-    Task<bool> VerifyEmailAsync(TokenRequestDto request, CancellationToken cancellationToken = default);
+    Task<bool> VerifyEmailAsync(VerifyEmailRequestDto request, CancellationToken cancellationToken = default);
 
     Task<AuthResultDto?> RefreshAsync(TokenRequestDto request, CancellationToken cancellationToken = default);
 }
