@@ -3,6 +3,9 @@ name: Deploy
 # Ships main to Azure Container Apps — only a commit CI has already passed. It runs when the
 # CI workflow finishes on main and does nothing unless that run succeeded. See DEPLOYMENT.md.
 #
+# Merging a pull request is the only way to deploy: main is protected so that every change
+# arrives through one, and there is deliberately no manual trigger.
+#
 # Migrations are deliberately NOT applied here. Applying one is a local, eyes-on operation
 # (CLAUDE.md), so a change that needs one is migrated by hand *before* it is merged.
 on:
@@ -10,7 +13,6 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  workflow_dispatch:
 
 # Nothing by default; each job asks for exactly what it uses. The Azure token in particular
 # is only mintable by the one job that deploys.
@@ -25,17 +27,16 @@ env:
   RESOURCE_GROUP: rg-financetracker-dev
   API_APP: ca-finance-tracker-api
   WORKER_JOB: caj-finance-tracker-worker
-  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  SHA: ${{ github.event.workflow_run.head_sha }}
 
 jobs:
   gate:
     # workflow_run's branch filter matches a branch *name*, and a pull request from a fork
     # can be named main. Only a push to this repository's own main may reach production.
     if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
