@@ -32,7 +32,7 @@ inside a session that is discarded when it ends).
 ```bash
 RG=rg-financetracker-dev
 LOC=canadacentral
-SQL=sql-finance-tracker-<something unique>   # becomes <name>.database.windows.net
+SQL=sql-financetracker-dev   # becomes <name>.database.windows.net
 GH_USER=<your GitHub username, lowercase>   # image paths on ghcr.io are lowercase
 
 read -rsp "SQL admin password: " ADMIN_PW; echo
@@ -41,7 +41,7 @@ read -rsp "JWT signing key: " JWT_KEY; echo
 read -rsp "BFF shared secret: " BFF_SECRET; echo
 read -rsp "GitHub read:packages token: " GHCR_TOKEN; echo
 
-APP_CONN="Server=tcp:$SQL.database.windows.net,1433;Initial Catalog=financetracker;User ID=ft_app;Password=$APP_PW;Encrypt=True;TrustServerCertificate=False;Connect Timeout=60;"
+APP_CONN="Server=tcp:$SQL.database.windows.net,1433;Initial Catalog=sqldb-finance-tracker-dev;User ID=ft_app;Password=$APP_PW;Encrypt=True;TrustServerCertificate=False;Connect Timeout=60;"
 ```
 
 ### 0. Before you start
@@ -94,7 +94,7 @@ az sql server create -g $RG -n $SQL -l $LOC \
 # can never be switched back, so it waits until sign-up opens.
 #
 # --auto-pause-delay 15 is the minimum: every wake-up is billed until the delay runs out.
-az sql db create -g $RG -s $SQL -n financetracker \
+az sql db create -g $RG -s $SQL -n sqldb-finance-tracker-dev \
   --edition GeneralPurpose --compute-model Serverless --family Gen5 --capacity 2 \
   --use-free-limit --free-limit-exhaustion-behavior AutoPause \
   --auto-pause-delay 15 \
@@ -110,7 +110,7 @@ Then in the portal, on the SQL server's **Networking** page, choose **Add your c
 address** so your own machine can reach it for step 2 and for future migrations. The
 database's overview page should show this month's remaining free amount — that is how you
 know the free offer, not the free account's 12-month SQL deal, is the one applied. Confirm the
-pause delay took, too: `az sql db show -g $RG -s $SQL -n financetracker --query autoPauseDelay`
+pause delay took, too: `az sql db show -g $RG -s $SQL -n sqldb-finance-tracker-dev --query autoPauseDelay`
 should print `15`; if not, set it on the database's **Compute + storage** page.
 
 ### 2. Copy your records (on your machine)
@@ -151,7 +151,7 @@ Check yours, and remove those lines afterwards.
    database is what keeps the free offer — letting the import create its own would make a
    paid one.
    ```
-   sqlpackage /Action:Import /SourceFile:"C:\temp\financetracker.bacpac" /TargetConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=financetracker;User ID=master;Password=<admin password>;Encrypt=True;Connect Timeout=60;"
+   sqlpackage /Action:Import /SourceFile:"C:\temp\financetracker.bacpac" /TargetConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=sqldb-finance-tracker-dev;User ID=master;Password=<admin password>;Encrypt=True;Connect Timeout=60;"
    ```
 6. **Verify.** Run all of these against **both** databases; every result should match.
    ```sql
@@ -196,7 +196,7 @@ Check yours, and remove those lines afterwards.
 
 The server admin can alter and drop anything; the API and worker only ever read and write
 rows (migrations are applied by hand, as the admin). Give them a login that can do only that.
-Run in the portal's **Query editor** on `financetracker`, signed in as `master`, with the app
+Run in the portal's **Query editor** on `sqldb-finance-tracker-dev`, signed in as `master`, with the app
 password in place of the placeholder:
 
 ```sql
@@ -368,7 +368,7 @@ with it, say — is gone unless you have your own copy.
 So take one **monthly**, from your machine, and keep it somewhere private and off the repo:
 
 ```
-sqlpackage /Action:Export /SourceConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=financetracker;User ID=master;Password=<admin password>;Encrypt=True;Connect Timeout=60;" /TargetFile:"<private folder>\financetracker-<yyyy-mm>.bacpac"
+sqlpackage /Action:Export /SourceConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=sqldb-finance-tracker-dev;User ID=master;Password=<admin password>;Encrypt=True;Connect Timeout=60;" /TargetFile:"<private folder>\financetracker-<yyyy-mm>.bacpac"
 ```
 
 This wakes the database once, like any other visit. A restore is an import into a new, empty
