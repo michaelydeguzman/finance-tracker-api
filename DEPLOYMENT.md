@@ -61,10 +61,16 @@ APP_CONN="Server=tcp:$SQL.database.windows.net,1433;Initial Catalog=sqldb-financ
   cannot pull the image and the API goes down. Renew with
   `az containerapp registry set -g $RG -n ca-finance-tracker-api --server ghcr.io --username $GH_USER --password "$GHCR_TOKEN"`
   and the same for the job (`az containerapp job registry set … -n caj-finance-tracker-worker`).
+  This repository is public, so the alternative is to make both packages public (the
+  package's settings on GitHub → Change visibility) and pull them with no credentials at all.
+  The images hold only the compiled public code and the commit SHA; every secret is injected
+  at runtime.
 - **Generate the secrets** (`openssl rand -base64 48` in Cloud Shell, once each): the JWT
   signing key, the BFF shared secret (the same value goes to Vercel as `API_BFF_SECRET`), and
   two SQL passwords — one for the server admin, one for the app. Keep them in a password
-  manager.
+  manager. Each is a separate value: the JWT key and the BFF secret must differ, or Vercel
+  would hold the key that signs every access token. On Windows PowerShell 5.1 instead:
+  `$b = New-Object byte[] 48; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)`.
 - **Two budget alerts.** Portal → Cost Management → Budgets → a monthly budget with alerts at
   $1 and $5. Everything below should cost nothing, and the database cannot bill (see step 1);
   this is how you find out if something else does. A budget only emails — it never stops
@@ -113,6 +119,29 @@ know the free offer, not the free account's 12-month SQL deal, is the one applie
 pause delay took, too: `az sql db show -g $RG -s $SQL -n sqldb-finance-tracker-dev --query autoPauseDelay`
 should print `15`; if not, set it on the database's **Compute + storage** page.
 
+**Creating these in the portal instead** works, with three differences from the commands:
+
+- **The portal disables public network access by default**, and every connection is then
+  refused with *Deny Public Network Access is set to Yes* (error 47073). On the server's
+  **Security → Networking** page, set public access to **Selected networks**, add your client
+  IPv4 address, and tick **Allow Azure services and resources to access this server**. That
+  tick is the `AllowAzureServices` rule above. Without it the API and the worker cannot
+  connect. Nothing shows until the first query: `/healthz` still passes, and the worker job
+  just fails with *Job has reached the specified backoff limit*.
+- **The admin login cannot be renamed later.** If it is `master`, remember that SSMS and other
+  tools also default to the `master` *database*. Choose `sqldb-finance-tracker-dev` explicitly
+  when connecting, or queries fail with *Invalid object name*.
+- **Check the database before step 2**, connected to it as the admin:
+  ```sql
+  SELECT DATABASEPROPERTYEX(DB_NAME(), 'Collation')        AS collation,        -- as local
+         DATABASEPROPERTYEX(DB_NAME(), 'ServiceObjective') AS tier,             -- GP_S_Gen5_2
+         (SELECT COUNT(*) FROM sys.objects WHERE is_ms_shipped = 0) AS user_objects; -- 0
+  ```
+  `SQL_Latin1_General_CP1_CI_AS` is the portal's default, and `_S_` in the tier means
+  serverless. On **Compute + storage**, confirm the free offer is applied, the behaviour when
+  the limit is reached is **auto-pause** (not *continue for additional charges*, which is
+  one-way), and the delay is 15 minutes.
+
 ### 2. Copy your records (on your machine)
 
 The commands here carry passwords, and shells can keep them in a history file. Recent
@@ -147,13 +176,66 @@ Check yours, and remove those lines afterwards.
    sqlpackage /Action:Export /SourceConnectionString:"<local connection string>" /TargetFile:"C:\temp\financetracker.bacpac"
    ```
    The local connection string is the one in `dotnet user-secrets list --project FinanceTracker/FinanceTracker.API.csproj`.
+
+   Run SqlPackage from **PowerShell**, not Git Bash, which rewrites `/Action:Export` into a
+   file path. If it refuses to start with *You must install or update .NET*, it needs a newer
+   .NET 8 runtime patch than the one installed: `winget install Microsoft.DotNet.Runtime.8`.
+
+   **Check the local database's users first.** The export carries every database user with
+   it, and a user mapped to a SQL login fails the import:
+   ```sql
+   -- Against your LOCAL database
+   SELECT name, type_desc FROM sys.database_principals
+   WHERE type IN ('S', 'U', 'G') AND name NOT IN ('dbo', 'guest');
+   ```
+   Any row is a user the Azure server cannot recreate (Windows users and groups cannot exist
+   there at all). When its name is the Azure admin's (a
+   local `master` login, say), the import stops at `CREATE USER [master] FOR LOGIN [master]`
+   with *Msg 15063 — The login already has an account with the user name 'dbo'*, because the
+   server admin already *is* `dbo` there. Such a user is only a local login's way in, and none
+   of the app's objects need it, so export from a copy that does not have it. Restore the
+   `.bak` from item 3 under a new name, and leave the original alone:
+   ```sql
+   -- Against your LOCAL server. Paths are SQL Server's default data folder.
+   RESTORE DATABASE [FinanceTrackerDB_Export] FROM DISK = N'financetracker-pre-cloud.bak' WITH CHECKSUM,
+     MOVE N'<data logical name>' TO N'<data folder>\FinanceTrackerDB_Export.mdf',
+     MOVE N'<log logical name>'  TO N'<data folder>\FinanceTrackerDB_Export_log.ldf';
+   ALTER DATABASE [FinanceTrackerDB_Export] SET READ_WRITE;
+   USE [FinanceTrackerDB_Export];
+   -- A user that owns the fixed-role schemas cannot be dropped; hand them back to their roles.
+   DECLARE @s nvarchar(max) = (SELECT STRING_AGG(N'ALTER AUTHORIZATION ON SCHEMA::' + QUOTENAME(s.name)
+       + N' TO ' + QUOTENAME(s.name) + N';', N' ')
+     FROM sys.schemas s JOIN sys.database_principals r ON r.name = s.name AND r.is_fixed_role = 1
+     WHERE s.principal_id = USER_ID('<user>'));
+   EXEC sp_executesql @s;
+   DROP USER [<user>];
+   ```
+   `RESTORE FILELISTONLY FROM DISK = N'financetracker-pre-cloud.bak'` gives the logical
+   names. Export from `FinanceTrackerDB_Export` instead, verify against the original in item
+   6, and drop the copy once everything matches.
 5. **Import** into the database created in step 1. Importing into that existing, empty
    database is what keeps the free offer — letting the import create its own would make a
    paid one.
    ```
    sqlpackage /Action:Import /SourceFile:"C:\temp\financetracker.bacpac" /TargetConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=sqldb-finance-tracker-dev;User ID=master;Password=<admin password>;Encrypt=True;Connect Timeout=60;"
    ```
-6. **Verify.** Run all of these against **both** databases; every result should match.
+   To keep the password out of the command, and so out of shell history, prompt for it:
+   ```powershell
+   $pw = Read-Host "Azure SQL admin password" -AsSecureString
+   $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pw))
+   ```
+   then use `Password=$plain` in the connection string. **Paste these lines one at a time.**
+   `Read-Host` takes the next pasted line as its answer, so a multi-line paste turns the rest
+   of the command into the password.
+
+   Success ends with *Successfully imported package*. **A failed import can leave part of the
+   schema behind**, and the next attempt refuses a database that is not empty. Before
+   retrying, `SELECT COUNT(*) FROM sys.objects WHERE is_ms_shipped = 0;` against the Azure
+   database must return `0`. If it does not, delete the database and create it again as in
+   step 1. It holds nothing yet.
+6. **Verify.** Run all of these against **both** databases; every result should match. In
+   SSMS, check the query window's database drop-down: it is `sqldb-finance-tracker-dev`, not
+   `master`.
    ```sql
    -- Exact row count of every table (sys.partitions only approximates). Needs SQL Server 2017+.
    DECLARE @sql nvarchar(max) = (
@@ -265,6 +347,35 @@ Why these settings:
   households need), and a household invitation appears on the invitee's households page
   whether or not it is emailed.
 
+**Creating the app and the job in the portal instead.** Keep the names exactly as above,
+because `deploy.yml` finds both by name.
+
+- **Choose *Container image* as the source.** Leave *source code* and any *continuous
+  deployment* option off. Those make Azure build the image, or commit a second workflow to
+  this repository that stores a client secret in GitHub. That workflow would race
+  `deploy.yml` on every merge, without its tip-of-`main` gate or smoke test.
+- **Image:** *Docker Hub or other registries*, registry `ghcr.io`, image
+  `<GH_USER>/finance-tracker-api:main` (or `…-worker:main`). Choose *Private* with your
+  username and the `read:packages` token, or *Public* if the packages are public. 0.25 CPU,
+  0.5 Gi.
+- **API ingress:** enabled, accepting traffic from anywhere, target port `8080`. **Job
+  trigger:** *Schedule*, the same cron and replica settings as above.
+- **Secrets can only be referenced once they exist.** So create with just the plain variables
+  (`Auth__AppBaseUrl`, `Email__Provider`, `ASPNETCORE_FORWARDEDHEADERS_ENABLED`; the job has
+  none), then:
+  1. **Security → Secrets:** add `db-connection` (`$APP_CONN` with the real password),
+     `jwt-signing-key` and `bff-shared-secret`. The job needs only `db-connection`. Secrets
+     are per app, not shared.
+  2. **Application → Containers → Environment variables:** add
+     `ConnectionStrings__FinanceTrackerDB`, `Jwt__SigningKey` and `Auth__BffSharedSecret`,
+     each with source *Reference a secret*. Keep the **double underscores**. The page is
+     edited in place, and **Save as a new revision** deploys it.
+  3. **Application → Scale:** min replicas `0`, **max `1`**. The portal defaults to 10, and
+     a second replica doubles every rate limit.
+
+The API refuses to start until those variables exist, so a revision that fails before step 2
+is expected. The **Log stream** names what is missing.
+
 ### 5. Deploy on merge
 
 The Deploy workflow signs in to Azure with a federated credential — no password stored in
@@ -314,13 +425,24 @@ the new commit, so it fails if the new revision never starts rather than passing
    |---|---|
    | `API_URL` | `https://<API fqdn from step 4>/api` |
    | `NEXT_PUBLIC_APP_URL` | `https://<your project>.vercel.app` |
-   | `AUTH_SECRET` | `npx auth secret` |
+   | `AUTH_SECRET` | `npx auth secret --raw` (without `--raw` it writes into the current folder's `.env.local`) |
    | `API_BFF_SECRET` | the BFF shared secret from step 0 |
    | `AUTH_SIGNUP_MODE` | `allowlist` |
    | `AUTH_ALLOWED_EMAILS` | your two addresses, comma-separated |
    | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | the Google OAuth client |
 
-   `NEXT_PUBLIC_APP_URL` is baked in at build time — redeploy after setting it.
+   `NEXT_PUBLIC_APP_URL` is baked in at build time — redeploy after setting it. Use the
+   project's stable address from **Settings → Domains**, never a deployment's own
+   `…-<hash>-<team>.vercel.app` URL, which changes on every deploy. The same address goes into
+   Google and `Auth__AppBaseUrl` below.
+
+   **Never set `NODE_TLS_REJECT_UNAUTHORIZED` here.** Locally it lets Node accept the .NET dev
+   certificate. In production it would turn off certificate checks for every call the BFF
+   makes.
+
+   Vercel refuses to deploy a Next.js release with known vulnerabilities (*Vulnerable version
+   of Next.js detected*). The fix is a patch update in the UI repository, through a pull
+   request like any other change, not a setting.
 3. In Google Cloud Console, add `https://<your project>.vercel.app/api/auth/callback/google` as
    an authorized redirect URI, and add both of you as test users while the consent screen is
    in Testing. Google's account id is the same for every OAuth client, so the identities you
