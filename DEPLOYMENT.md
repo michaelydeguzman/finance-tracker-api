@@ -294,7 +294,9 @@ credential with that exact subject.
 
 Add those three as **repository variables** (Settings → Secrets and variables → Actions →
 Variables). They are identifiers, not secrets. From then on every merge to `main` that passes
-CI is deployed; run the Deploy workflow by hand to redeploy.
+CI is deployed, and that is the only way to deploy: `main` requires a pull request, and the
+workflow has no manual trigger. To restart the API without a new image — after changing a
+secret, say — restart its active revision in the portal (Revisions and replicas).
 
 The workflow deploys a commit only while it is still the tip of `main`, so a late or re-run CI
 of an older commit cannot roll production back. Its smoke test waits until `/healthz` reports
