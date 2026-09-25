@@ -30,7 +30,7 @@ so no secret is typed into a command or saved in history (they still reach `az` 
 inside a session that is discarded when it ends).
 
 ```bash
-RG=rg-finance-tracker
+RG=rg-financetracker-dev
 LOC=canadacentral
 SQL=sql-finance-tracker-<something unique>   # becomes <name>.database.windows.net
 GH_USER=<your GitHub username, lowercase>   # image paths on ghcr.io are lowercase
@@ -86,7 +86,7 @@ SELECT DATABASEPROPERTYEX(DB_NAME(), 'Collation');
 az group create -n $RG -l $LOC
 
 az sql server create -g $RG -n $SQL -l $LOC \
-  --admin-user ftadmin --admin-password "$ADMIN_PW"
+  --admin-user master --admin-password "$ADMIN_PW"
 
 # --use-free-limit is the free offer. AutoPause is a hard $0 ceiling: if a month ever uses up
 # the free allowance, the database pauses until the 1st rather than billing. It can later be
@@ -151,7 +151,7 @@ Check yours, and remove those lines afterwards.
    database is what keeps the free offer — letting the import create its own would make a
    paid one.
    ```
-   sqlpackage /Action:Import /SourceFile:"C:\temp\financetracker.bacpac" /TargetConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=financetracker;User ID=ftadmin;Password=<admin password>;Encrypt=True;Connect Timeout=60;"
+   sqlpackage /Action:Import /SourceFile:"C:\temp\financetracker.bacpac" /TargetConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=financetracker;User ID=master;Password=<admin password>;Encrypt=True;Connect Timeout=60;"
    ```
 6. **Verify.** Run all of these against **both** databases; every result should match.
    ```sql
@@ -196,7 +196,7 @@ Check yours, and remove those lines afterwards.
 
 The server admin can alter and drop anything; the API and worker only ever read and write
 rows (migrations are applied by hand, as the admin). Give them a login that can do only that.
-Run in the portal's **Query editor** on `financetracker`, signed in as `ftadmin`, with the app
+Run in the portal's **Query editor** on `financetracker`, signed in as `master`, with the app
 password in place of the placeholder:
 
 ```sql
@@ -368,7 +368,7 @@ with it, say — is gone unless you have your own copy.
 So take one **monthly**, from your machine, and keep it somewhere private and off the repo:
 
 ```
-sqlpackage /Action:Export /SourceConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=financetracker;User ID=ftadmin;Password=<admin password>;Encrypt=True;Connect Timeout=60;" /TargetFile:"<private folder>\financetracker-<yyyy-mm>.bacpac"
+sqlpackage /Action:Export /SourceConnectionString:"Server=tcp:<SQL>.database.windows.net,1433;Initial Catalog=financetracker;User ID=master;Password=<admin password>;Encrypt=True;Connect Timeout=60;" /TargetFile:"<private folder>\financetracker-<yyyy-mm>.bacpac"
 ```
 
 This wakes the database once, like any other visit. A restore is an import into a new, empty

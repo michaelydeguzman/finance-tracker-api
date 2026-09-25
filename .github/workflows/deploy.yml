@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RESOURCE_GROUP: rg-finance-tracker
+  RESOURCE_GROUP: rg-financetracker-dev
   API_APP: ca-finance-tracker-api
   WORKER_JOB: caj-finance-tracker-worker
   SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
