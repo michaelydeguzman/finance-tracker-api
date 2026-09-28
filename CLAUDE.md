@@ -50,9 +50,13 @@ inherits all of it and should declare almost nothing itself.
 
 | File | Owns |
 |---|---|
-| `Directory.Build.props` | `TargetFramework`, `Nullable`, `ImplicitUsings` for every project. |
+| `Directory.Build.props` | `TargetFramework`, `Nullable`, `ImplicitUsings` for every project, and the release `Version`. |
 | `Directory.Packages.props` | Every package version, via central package management. |
 | `.editorconfig` | Code style — file-scoped namespaces, `_camelCase` private fields, Allman braces. |
+
+**Versioning is semver, bumped by hand** in the pull request that makes a release — fix is a
+patch, feature a minor, breaking change a major. The API and worker share the one `<Version>`;
+`/healthz` reports it in `X-App-Version`. The UI versions independently.
 
 **Do not put a `Version` attribute on a `PackageReference`.** With central package management
 on, that is an error (NU1008). Add or change the version in `Directory.Packages.props`

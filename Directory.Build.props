@@ -16,4 +16,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!--
+    The release version, shared by the API and the worker: semver, bumped by hand in the pull
+    request that makes a release (fix = patch, feature = minor, breaking = major). /healthz
+    reports it in X-App-Version.
+
+    The SDK would otherwise append "+<commit>" to the informational version whenever a build
+    can see .git, so local builds and image builds would disagree. The commit already has its
+    own header, X-Source-Sha.
+  -->
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
 </Project>
