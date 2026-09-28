@@ -8,13 +8,26 @@ public sealed record CategoryUsage(int Transactions, int RecurringTransactions)
     public bool InUse => Transactions > 0 || RecurringTransactions > 0;
 }
 
+/// <summary>
+/// The unique index on <c>(UserId, CategoryType, Name)</c> rejected a save. Callers check
+/// <see cref="ICategoryRepository.NameTakenAsync"/> first, so this means two identical writes
+/// raced past that check together.
+/// </summary>
+public sealed class CategoryNameTakenException : Exception
+{
+    public CategoryNameTakenException(Exception? innerException = null)
+        : base("A category with that type and name already exists for its owner.", innerException) { }
+}
+
 public interface ICategoryRepository
 {
+    /// <exception cref="CategoryNameTakenException">The unique index rejected the name.</exception>
     Task<Category> AddAsync(Category category, CancellationToken cancellationToken = default);
     Task<Category?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<List<Category>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<List<Category>> GetByTypeAsync(CategoryType type, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+    /// <exception cref="CategoryNameTakenException">The unique index rejected the name.</exception>
     Task<Category?> UpdateAsync(Category category, CancellationToken cancellationToken = default);
 
     /// <summary>

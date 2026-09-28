@@ -23,8 +23,16 @@ namespace FinanceTracker.Application.Services
             if (await _repository.NameTakenAsync(category.UserId, category.CategoryType, category.Name, null, cancellationToken))
                 return NameTaken(category.CategoryType, category.Name);
 
-            var created = await _repository.AddAsync(category, cancellationToken);
-            return CategoryCommandResult.Success(CategoryResponseDto.FromEntity(created));
+            try
+            {
+                var created = await _repository.AddAsync(category, cancellationToken);
+                return CategoryCommandResult.Success(CategoryResponseDto.FromEntity(created));
+            }
+            catch (CategoryNameTakenException)
+            {
+                // An identical create won the race past the check above.
+                return NameTaken(category.CategoryType, category.Name);
+            }
         }
 
         public async Task<Category?> GetCategoryByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -87,10 +95,18 @@ namespace FinanceTracker.Application.Services
 
             category.Name = name;
 
-            var updated = await _repository.UpdateAsync(category, cancellationToken);
-            return updated is null
-                ? CategoryCommandResult.NotFound()
-                : CategoryCommandResult.Success(CategoryResponseDto.FromEntity(updated));
+            try
+            {
+                var updated = await _repository.UpdateAsync(category, cancellationToken);
+                return updated is null
+                    ? CategoryCommandResult.NotFound()
+                    : CategoryCommandResult.Success(CategoryResponseDto.FromEntity(updated));
+            }
+            catch (CategoryNameTakenException)
+            {
+                // Another write took the name between the check above and this save.
+                return NameTaken(category.CategoryType, name);
+            }
         }
 
         private static CategoryCommandResult NameTaken(CategoryType type, string name)
