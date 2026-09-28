@@ -60,4 +60,24 @@ public class CategoryServiceTests
         result.Outcome.Should().Be(CategoryOutcome.Conflict);
         result.Message.Should().Contain("Food");
     }
+
+    [Fact]
+    public async Task DeleteCategory_WhenARecordLandsBetweenTheUsageCheckAndTheDelete_IsAConflict()
+    {
+        var category = Groceries();
+        _repository
+            .Setup(r => r.GetByIdAsync(category.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(category);
+        _repository
+            .Setup(r => r.GetUsageAsync(category.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CategoryUsage(0, 0));
+        _repository
+            .Setup(r => r.DeleteAsync(category.Id, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CategoryInUseException());
+
+        var result = await new CategoryService(_repository.Object).DeleteCategoryAsync(category.Id);
+
+        result.Outcome.Should().Be(CategoryOutcome.Conflict);
+        result.Message.Should().Contain("Groceries");
+    }
 }

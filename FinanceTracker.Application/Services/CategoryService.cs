@@ -66,9 +66,18 @@ namespace FinanceTracker.Application.Services
                     $"'{category.Name}' is used by {Describe(usage)}. " +
                     "Move them to another category before deleting it.");
 
-            return await _repository.DeleteAsync(id, cancellationToken)
-                ? CategoryCommandResult.Success()
-                : CategoryCommandResult.NotFound();
+            try
+            {
+                return await _repository.DeleteAsync(id, cancellationToken)
+                    ? CategoryCommandResult.Success()
+                    : CategoryCommandResult.NotFound();
+            }
+            catch (CategoryInUseException)
+            {
+                // Something was filed under it after the count above; the foreign key held.
+                return CategoryCommandResult.Conflict(
+                    $"'{category.Name}' is now in use. Move its records to another category before deleting it.");
+            }
         }
 
         /// <summary>

@@ -45,7 +45,19 @@ namespace FinanceTracker.Infrastructure.Persistence
                 return false;
 
             _context.Categories.Remove(category);
-            await _context.SaveChangesAsync(cancellationToken);
+
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 547 })
+            {
+                // A record was filed under it after the caller's usage check. Detached so the
+                // doomed delete is not retried by a later save on the same context.
+                _context.Entry(category).State = EntityState.Detached;
+                throw new CategoryInUseException(ex);
+            }
+
             return true;
         }
 
@@ -97,7 +109,7 @@ namespace FinanceTracker.Infrastructure.Persistence
             CancellationToken cancellationToken = default)
         {
             // Filters off: the index spans all of the owner's categories, including any the
-            // caller cannot see â a housemate renaming someone else's category, say.
+            // caller cannot see — a housemate renaming someone else's category, say.
             return await _context.Categories.IgnoreQueryFilters()
                 .AnyAsync(c => c.UserId == ownerUserId
                                && c.CategoryType == categoryType

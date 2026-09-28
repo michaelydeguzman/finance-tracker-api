@@ -19,6 +19,17 @@ public sealed class CategoryNameTakenException : Exception
         : base("A category with that type and name already exists for its owner.", innerException) { }
 }
 
+/// <summary>
+/// The <c>Restrict</c> foreign key rejected a delete. Callers check
+/// <see cref="ICategoryRepository.GetUsageAsync"/> first, so this means a record was filed
+/// under the category between that check and the delete.
+/// </summary>
+public sealed class CategoryInUseException : Exception
+{
+    public CategoryInUseException(Exception? innerException = null)
+        : base("The category is still referenced by a transaction or recurring template.", innerException) { }
+}
+
 public interface ICategoryRepository
 {
     /// <exception cref="CategoryNameTakenException">The unique index rejected the name.</exception>
@@ -26,6 +37,7 @@ public interface ICategoryRepository
     Task<Category?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<List<Category>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<List<Category>> GetByTypeAsync(CategoryType type, CancellationToken cancellationToken = default);
+    /// <exception cref="CategoryInUseException">A foreign key still points at the category.</exception>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
     /// <exception cref="CategoryNameTakenException">The unique index rejected the name.</exception>
     Task<Category?> UpdateAsync(Category category, CancellationToken cancellationToken = default);

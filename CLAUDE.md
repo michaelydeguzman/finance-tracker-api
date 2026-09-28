@@ -240,7 +240,9 @@ Two consequences worth knowing:
   history with no undo. `CategoryService` now answers 409 while any transaction or recurring
   template points at it, counted with the query filters **off** (the foreign key is enforced
   by the database, which knows nothing of them). `FK_Transactions_Categories_CategoryId` is
-  `Restrict` as the backstop for a row that lands between the check and the delete.
+  `Restrict` as the backstop for a row that lands between the check and the delete; the
+  repository turns that rejection (SQL error 547) into `CategoryInUseException`, so it is the
+  same 409 rather than a 500.
 - **A category's type is fixed at creation.** Flipping Expense to Income would silently turn
   every transaction filed under it into earnings, so an update that changes it is a 400.
 - Category uniqueness is still scoped to `(UserId, CategoryType, Name)`, so a household can
