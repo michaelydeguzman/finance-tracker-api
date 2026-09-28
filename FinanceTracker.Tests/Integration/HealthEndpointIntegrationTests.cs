@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using FinanceTracker.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -51,6 +52,21 @@ public class HealthEndpointIntegrationTests : IClassFixture<FinanceTrackerWebApp
         var response = await _factory.CreateClient().GetAsync("/healthz");
 
         response.Headers.Contains("X-Source-Sha").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Healthz_NamesTheReleaseVersion()
+    {
+        // The version comes from <Version> in Directory.Build.props, so the API assembly and
+        // this one carry the same number. It must be the bare semver: the SDK would otherwise
+        // append "+<commit>" whenever a build can see .git, and the commit has its own header.
+        var expected = typeof(Program).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion;
+
+        var response = await _factory.CreateClient().GetAsync("/healthz");
+
+        expected.Should().MatchRegex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$");
+        response.Headers.GetValues("X-App-Version").Should().ContainSingle().Which.Should().Be(expected);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using FinanceTracker.Domain.Services;
+using System.Reflection;
 using System.Text;
 using System.Threading.RateLimiting;
 using FinanceTracker.API.Authentication;
@@ -252,7 +253,11 @@ app.MapControllers();
 
 // SOURCE_SHA is baked into the image at build time. The deploy pipeline waits for this header
 // to match the commit it shipped, which is how it knows the new revision is the one answering
-// rather than the one it replaced.
+// rather than the one it replaced. X-App-Version is the release version from
+// Directory.Build.props, for people rather than the pipeline.
+var appVersion = typeof(Program).Assembly
+    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
 app.MapHealthChecks("/healthz", new HealthCheckOptions
 {
     ResponseWriter = (context, report) =>
@@ -261,6 +266,9 @@ app.MapHealthChecks("/healthz", new HealthCheckOptions
 
         if (!string.IsNullOrWhiteSpace(sourceSha))
             context.Response.Headers["X-Source-Sha"] = sourceSha;
+
+        if (!string.IsNullOrWhiteSpace(appVersion))
+            context.Response.Headers["X-App-Version"] = appVersion;
 
         context.Response.ContentType = "text/plain";
         return context.Response.WriteAsync(report.Status.ToString());
