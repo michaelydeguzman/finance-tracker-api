@@ -1,5 +1,6 @@
 using FinanceTracker.Domain.Entities;
 using FinanceTracker.Domain.Repositories;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTracker.Infrastructure.Persistence
@@ -16,7 +17,7 @@ namespace FinanceTracker.Infrastructure.Persistence
         public async Task<Category> AddAsync(Category category, CancellationToken cancellationToken = default)
         {
             _context.Categories.Add(category);
-            await _context.SaveChangesAsync(cancellationToken);
+            await SaveNamedAsync(category, cancellationToken);
             return category;
         }
 
@@ -44,7 +45,19 @@ namespace FinanceTracker.Infrastructure.Persistence
                 return false;
 
             _context.Categories.Remove(category);
-            await _context.SaveChangesAsync(cancellationToken);
+
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 547 })
+            {
+                // A record was filed under it after the caller's usage check. Detached so the
+                // doomed delete is not retried by a later save on the same context.
+                _context.Entry(category).State = EntityState.Detached;
+                throw new CategoryInUseException(ex);
+            }
+
             return true;
         }
 
@@ -55,8 +68,54 @@ namespace FinanceTracker.Infrastructure.Persistence
                 return null;
 
             _context.Categories.Update(category);
-            await _context.SaveChangesAsync(cancellationToken);
+            await SaveNamedAsync(category, cancellationToken);
             return category;
+        }
+
+        /// <summary>
+        /// Saves a category whose name the caller has already checked, translating the unique
+        /// index rejecting it anyway — two identical writes racing past that check — into
+        /// <see cref="CategoryNameTakenException"/>. The rejected entry is detached so it cannot
+        /// poison a later save on the same context.
+        /// </summary>
+        private async Task SaveNamedAsync(Category category, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
+            {
+                _context.Entry(category).State = EntityState.Detached;
+                throw new CategoryNameTakenException(ex);
+            }
+        }
+
+        public async Task<CategoryUsage> GetUsageAsync(Guid categoryId, CancellationToken cancellationToken = default)
+        {
+            var transactions = await _context.Transactions.IgnoreQueryFilters()
+                .CountAsync(t => t.CategoryId == categoryId, cancellationToken);
+            var recurringTransactions = await _context.RecurringTransactions.IgnoreQueryFilters()
+                .CountAsync(r => r.CategoryId == categoryId, cancellationToken);
+
+            return new CategoryUsage(transactions, recurringTransactions);
+        }
+
+        public async Task<bool> NameTakenAsync(
+            Guid ownerUserId,
+            CategoryType categoryType,
+            string name,
+            Guid? exceptCategoryId = null,
+            CancellationToken cancellationToken = default)
+        {
+            // Filters off: the index spans all of the owner's categories, including any the
+            // caller cannot see — a housemate renaming someone else's category, say.
+            return await _context.Categories.IgnoreQueryFilters()
+                .AnyAsync(c => c.UserId == ownerUserId
+                               && c.CategoryType == categoryType
+                               && c.Name == name
+                               && c.Id != exceptCategoryId,
+                    cancellationToken);
         }
     }
 }

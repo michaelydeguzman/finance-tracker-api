@@ -745,6 +745,83 @@ public class HouseholdSharingIntegrationTests : IClassFixture<FinanceTrackerWebA
     }
 
     [Fact]
+    public async Task AMemberCannotDeleteACategoryTheirHousematesHistoryIsFiledUnder()
+    {
+        // Sharing widened who can delete a category. When Transactions -> Categories
+        // cascaded, Bob deleting Alice's category took Alice's history with it, unasked.
+        var (alice, bob) = await SharedHouseholdAsync();
+        var categoryId = await CreateCategoryAsync(alice.Client, $"Alice's groceries {Guid.NewGuid():N}");
+        var label = await RecordSpendOnAsync(alice.Client, categoryId, $"Alice's shop {Guid.NewGuid():N}");
+
+        var response = await bob.Client.DeleteAsync($"/api/v1/categories/{categoryId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await alice.Client.GetStringAsync("/api/v1/transactions")).Should().Contain(label);
+    }
+
+    [Fact]
+    public async Task AMemberCannotDeleteACategoryOnlyTheirHousematesTemplateUses()
+    {
+        // No transactions yet, only Alice's schedule. The template's foreign key was already
+        // Restrict, so this used to be a 500 from SQL Server rather than a loss — but the
+        // refusal belongs to the service, and it must answer the same 409 either way.
+        var (alice, bob) = await SharedHouseholdAsync();
+
+        var frequencyId = Guid.NewGuid();
+        await _factory.SeedAsync(async context =>
+        {
+            context.Frequencies.Add(new Frequency
+            {
+                Id = frequencyId,
+                Name = $"Monthly {frequencyId:N}",
+                Type = FrequencyType.Monthly,
+                IntervalDays = 30,
+                IsActive = true
+            });
+
+            await context.SaveChangesAsync();
+        });
+
+        var categoryId = await CreateCategoryAsync(alice.Client, $"Alice's rent {Guid.NewGuid():N}");
+        var templateName = $"Alice's rent schedule {Guid.NewGuid():N}";
+        var created = await alice.Client.PostAsJsonAsync(
+            "/api/v1/recurring-transactions",
+            new CreateRecurringTransactionDto
+            {
+                Name = templateName,
+                CategoryId = categoryId,
+                FrequencyId = frequencyId,
+                Amount = 1200m,
+                StartDate = DateTime.UtcNow.Date.AddDays(1)
+            },
+            HttpJsonOptions.ForApi);
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var response = await bob.Client.DeleteAsync($"/api/v1/categories/{categoryId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await alice.Client.GetStringAsync("/api/v1/recurring-transactions")).Should().Contain(templateName);
+    }
+
+    [Fact]
+    public async Task ARenameByAHousemateClashesWithTheOwnersNamesNotTheirOwn()
+    {
+        // The unique index is (UserId, CategoryType, Name) on the category's owner. Checking
+        // the editor's names instead would pass a rename the database then rejects.
+        var (alice, bob) = await SharedHouseholdAsync();
+        var taken = $"Alice's groceries {Guid.NewGuid():N}";
+        await CreateCategoryAsync(alice.Client, taken);
+        var aliceFood = await CreateCategoryAsync(alice.Client, $"Alice's food {Guid.NewGuid():N}");
+
+        var response = await bob.Client.PutAsJsonAsync(
+            $"/api/v1/categories/{aliceFood}",
+            new UpdateCategoryDto { Name = taken, CategoryType = CategoryType.Expense },
+            HttpJsonOptions.ForApi);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
     public async Task AnUnconfirmedAddressCannotStartAHousehold()
     {
         // A household is the only thing here that mails a third party, and it puts a name its

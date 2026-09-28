@@ -486,8 +486,8 @@ the new commit, so it fails if the new revision never starts rather than passing
 
 Azure's automatic backups on the free offer reach back **7 days** and nothing further — no
 long-term retention and no database copy. The pre-cloud `.bak` covers nothing entered after the
-cutover. Anything noticed later than a week — a category deleted and its transactions cascaded
-with it, say — is gone unless you have your own copy.
+cutover. Anything noticed later than a week — a transaction deleted by mistake, say — is gone
+unless you have your own copy.
 
 So take one **monthly**, from your machine, and keep it somewhere private and off the repo:
 
@@ -529,8 +529,6 @@ This setup is right for a closed test and deliberately incomplete for strangers:
   password and magic-link sign-in for everyone. Before strangers arrive: a Vercel firewall
   rate rule on `/api/account/*` and the credentials callback, and a limit keyed on the real
   client address.
-- **The category-delete cascade** in CLAUDE.md's Households section: one member can erase
-  another's history with no undo.
 - **Dates** — the dashboard turns its local date ranges into UTC instants and compares them
   with calendar dates, so for anyone outside UTC a range is off by a day.
 - **SQL by managed identity** instead of a password, a narrower role than Contributor for the

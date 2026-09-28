@@ -1,12 +1,11 @@
 using FinanceTracker.Domain.Services;
-using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Services;
 using FinanceTracker.Domain.Entities;
 using MediatR;
 
 namespace FinanceTracker.Application.Features.Categories.Commands.CreateCategory;
 
-public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategoryCommand, CategoryResponseDto>
+public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategoryCommand, CategoryCommandResult>
 {
     private readonly ICategoryService _categoryService;
     private readonly ICurrentUserAccessor _currentUser;
@@ -17,7 +16,7 @@ public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategor
         _currentUser = currentUser;
     }
 
-    public async Task<CategoryResponseDto> Handle(CreateCategoryCommand request, CancellationToken cancellationToken)
+    public async Task<CategoryCommandResult> Handle(CreateCategoryCommand request, CancellationToken cancellationToken)
     {
         var category = new Category
         {
@@ -33,7 +32,6 @@ public sealed class CreateCategoryCommandHandler : IRequestHandler<CreateCategor
             IsActive = true
         };
 
-        var created = await _categoryService.AddCategoryAsync(category, cancellationToken);
-        return CategoryResponseDto.FromEntity(created);
+        return await _categoryService.AddCategoryAsync(category, cancellationToken);
     }
 }

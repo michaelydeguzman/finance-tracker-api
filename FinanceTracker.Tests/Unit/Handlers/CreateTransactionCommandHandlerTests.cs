@@ -70,10 +70,10 @@ public class CreateTransactionCommandHandlerTests
 
         var result = await sut.Handle(new CreateTransactionCommand(dto), CancellationToken.None);
 
-        result.Should().BeOfType<TransactionResponseDto>();
-        result.Name.Should().Be("Coffee");
-        result.CategoryName.Should().Be("Food");
-        result.CategoryType.Should().Be(CategoryType.Expense.ToString());
+        var created = result.Should().BeOfType<TransactionResponseDto>().Subject;
+        created.Name.Should().Be("Coffee");
+        created.CategoryName.Should().Be("Food");
+        created.CategoryType.Should().Be(CategoryType.Expense.ToString());
         service.Verify(s => s.AddTransactionAsync(It.Is<Transaction>(t =>
             t.Name == dto.Name && t.CategoryId == categoryId && t.CreatedBy == TestCurrentUserAccessor.DefaultEmail),
             It.IsAny<CancellationToken>()), Times.Once);

@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using FinanceTracker.Application.Dtos;
 using FinanceTracker.Application.Dtos.Responses;
+using FinanceTracker.Application.Features.Categories;
 using FinanceTracker.Application.Features.Categories.Commands.CreateCategory;
 using FinanceTracker.Application.Features.Categories.Commands.DeleteCategory;
 using FinanceTracker.Application.Features.Categories.Commands.UpdateCategory;
@@ -31,8 +32,11 @@ public class CategoriesV1Controller : ControllerBase
         [FromBody] CreateCategoryDto dto,
         CancellationToken cancellationToken = default)
     {
-        var response = await _sender.Send(new CreateCategoryCommand(dto), cancellationToken);
-        return CreatedAtAction(nameof(GetCategoryById), new { id = response.Id }, ApiResponseDto<CategoryResponseDto>.Ok(response));
+        var result = await _sender.Send(new CreateCategoryCommand(dto), cancellationToken);
+        if (result.Outcome is not CategoryOutcome.Success)
+            return Failure<CategoryResponseDto>(result);
+
+        return CreatedAtAction(nameof(GetCategoryById), new { id = result.Data!.Id }, ApiResponseDto<CategoryResponseDto>.Ok(result.Data));
     }
 
     [HttpPut("{id}")]
@@ -41,11 +45,11 @@ public class CategoriesV1Controller : ControllerBase
         [FromBody] UpdateCategoryDto dto,
         CancellationToken cancellationToken = default)
     {
-        var updated = await _sender.Send(new UpdateCategoryCommand(id, dto), cancellationToken);
-        if (updated is null)
-            return NotFound(ApiResponseDto<CategoryResponseDto>.Fail("Category not found."));
+        var result = await _sender.Send(new UpdateCategoryCommand(id, dto), cancellationToken);
+        if (result.Outcome is not CategoryOutcome.Success)
+            return Failure<CategoryResponseDto>(result);
 
-        return Ok(ApiResponseDto<CategoryResponseDto>.Ok(updated));
+        return Ok(ApiResponseDto<CategoryResponseDto>.Ok(result.Data!));
     }
 
     [HttpDelete("{id}")]
@@ -53,12 +57,22 @@ public class CategoriesV1Controller : ControllerBase
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var deleted = await _sender.Send(new DeleteCategoryCommand(id), cancellationToken);
-        if (!deleted)
-            return NotFound(ApiResponseDto<string>.Fail("Category not found."));
+        var result = await _sender.Send(new DeleteCategoryCommand(id), cancellationToken);
+        if (result.Outcome is not CategoryOutcome.Success)
+            return Failure<string>(result);
 
         return Ok(ApiResponseDto<string>.Ok("Category deleted successfully."));
     }
+
+    private ObjectResult Failure<T>(CategoryCommandResult result)
+        => StatusCode(
+            result.Outcome switch
+            {
+                CategoryOutcome.NotFound => StatusCodes.Status404NotFound,
+                CategoryOutcome.Conflict => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status400BadRequest
+            },
+            ApiResponseDto<T>.Fail(result.Message ?? "Request could not be completed."));
 
     [HttpGet("{id}")]
     public async Task<ActionResult<ApiResponseDto<CategoryResponseDto>>> GetCategoryById(
