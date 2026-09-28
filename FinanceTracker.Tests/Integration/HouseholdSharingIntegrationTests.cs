@@ -745,6 +745,39 @@ public class HouseholdSharingIntegrationTests : IClassFixture<FinanceTrackerWebA
     }
 
     [Fact]
+    public async Task AMemberCannotDeleteACategoryTheirHousematesHistoryIsFiledUnder()
+    {
+        // Sharing widened who can delete a category. When Transactions -> Categories
+        // cascaded, Bob deleting Alice's category took Alice's history with it, unasked.
+        var (alice, bob) = await SharedHouseholdAsync();
+        var categoryId = await CreateCategoryAsync(alice.Client, $"Alice's groceries {Guid.NewGuid():N}");
+        var label = await RecordSpendOnAsync(alice.Client, categoryId, $"Alice's shop {Guid.NewGuid():N}");
+
+        var response = await bob.Client.DeleteAsync($"/api/v1/categories/{categoryId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await alice.Client.GetStringAsync("/api/v1/transactions")).Should().Contain(label);
+    }
+
+    [Fact]
+    public async Task ARenameByAHousemateClashesWithTheOwnersNamesNotTheirOwn()
+    {
+        // The unique index is (UserId, CategoryType, Name) on the category's owner. Checking
+        // the editor's names instead would pass a rename the database then rejects.
+        var (alice, bob) = await SharedHouseholdAsync();
+        var taken = $"Alice's groceries {Guid.NewGuid():N}";
+        await CreateCategoryAsync(alice.Client, taken);
+        var aliceFood = await CreateCategoryAsync(alice.Client, $"Alice's food {Guid.NewGuid():N}");
+
+        var response = await bob.Client.PutAsJsonAsync(
+            $"/api/v1/categories/{aliceFood}",
+            new UpdateCategoryDto { Name = taken, CategoryType = CategoryType.Expense },
+            HttpJsonOptions.ForApi);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
     public async Task AnUnconfirmedAddressCannotStartAHousehold()
     {
         // A household is the only thing here that mails a third party, and it puts a name its

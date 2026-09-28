@@ -24,10 +24,13 @@ namespace FinanceTracker.Infrastructure.Persistence.Configurations
             builder.Property(e => e.TransactionDate)
                 .IsRequired();
 
+            // Restrict, not Cascade: a household member can delete a housemate's category, and
+            // a cascade made that delete their history too. CategoryService refuses a delete
+            // while anything uses the category; this is the backstop if a row lands in between.
             builder.HasOne(e => e.Category)
                 .WithMany(category => category.Transactions)
                 .HasForeignKey(e => e.CategoryId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             builder.Property(e => e.CreatedAt)
                 .IsRequired();

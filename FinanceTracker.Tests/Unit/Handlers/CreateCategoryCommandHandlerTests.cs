@@ -1,4 +1,6 @@
 using FinanceTracker.Application.Dtos;
+using FinanceTracker.Application.Dtos.Responses;
+using FinanceTracker.Application.Features.Categories;
 using FinanceTracker.Application.Features.Categories.Commands.CreateCategory;
 using FinanceTracker.Application.Services;
 using FinanceTracker.Domain.Entities;
@@ -17,14 +19,14 @@ public class CreateCategoryCommandHandlerTests
         var categoryService = new Mock<ICategoryService>();
         categoryService
             .Setup(s => s.AddCategoryAsync(It.IsAny<Category>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Category c, CancellationToken _) => c);
+            .ReturnsAsync((Category c, CancellationToken _) => CategoryCommandResult.Success(CategoryResponseDto.FromEntity(c)));
 
         var sut = new CreateCategoryCommandHandler(categoryService.Object, new TestCurrentUserAccessor());
 
         var result = await sut.Handle(new CreateCategoryCommand(dto), CancellationToken.None);
 
-        result.Name.Should().Be("Utilities");
-        result.CategoryType.Should().Be(CategoryType.Expense);
+        result.Data!.Name.Should().Be("Utilities");
+        result.Data.CategoryType.Should().Be(CategoryType.Expense);
         categoryService.Verify(s => s.AddCategoryAsync(It.Is<Category>(c =>
             c.Name == dto.Name && c.CategoryType == dto.CategoryType && c.IsActive
             && c.UserId == TestCurrentUserAccessor.DefaultUserId), It.IsAny<CancellationToken>()), Times.Once);
@@ -43,7 +45,7 @@ public class CreateCategoryCommandHandlerTests
         var categoryService = new Mock<ICategoryService>();
         categoryService
             .Setup(s => s.AddCategoryAsync(It.IsAny<Category>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Category c, CancellationToken _) => c);
+            .ReturnsAsync((Category c, CancellationToken _) => CategoryCommandResult.Success(CategoryResponseDto.FromEntity(c)));
 
         var sut = new CreateCategoryCommandHandler(
             categoryService.Object,

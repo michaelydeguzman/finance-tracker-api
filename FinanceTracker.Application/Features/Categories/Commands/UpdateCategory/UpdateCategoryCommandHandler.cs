@@ -1,10 +1,9 @@
-using FinanceTracker.Application.Dtos.Responses;
 using FinanceTracker.Application.Services;
 using MediatR;
 
 namespace FinanceTracker.Application.Features.Categories.Commands.UpdateCategory;
 
-public sealed class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategoryCommand, CategoryResponseDto?>
+public sealed class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategoryCommand, CategoryCommandResult>
 {
     private readonly ICategoryService _categoryService;
 
@@ -13,9 +12,8 @@ public sealed class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategor
         _categoryService = categoryService;
     }
 
-    public async Task<CategoryResponseDto?> Handle(UpdateCategoryCommand request, CancellationToken cancellationToken)
+    public async Task<CategoryCommandResult> Handle(UpdateCategoryCommand request, CancellationToken cancellationToken)
     {
-        var updated = await _categoryService.UpdateCategoryAsync(request.Id, request.Dto.Name, request.Dto.CategoryType, cancellationToken);
-        return updated is null ? null : CategoryResponseDto.FromEntity(updated);
+        return await _categoryService.UpdateCategoryAsync(request.Id, request.Dto.Name, request.Dto.CategoryType, cancellationToken);
     }
 }

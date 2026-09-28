@@ -58,5 +58,32 @@ namespace FinanceTracker.Infrastructure.Persistence
             await _context.SaveChangesAsync(cancellationToken);
             return category;
         }
+
+        public async Task<CategoryUsage> GetUsageAsync(Guid categoryId, CancellationToken cancellationToken = default)
+        {
+            var transactions = await _context.Transactions.IgnoreQueryFilters()
+                .CountAsync(t => t.CategoryId == categoryId, cancellationToken);
+            var recurringTransactions = await _context.RecurringTransactions.IgnoreQueryFilters()
+                .CountAsync(r => r.CategoryId == categoryId, cancellationToken);
+
+            return new CategoryUsage(transactions, recurringTransactions);
+        }
+
+        public async Task<bool> NameTakenAsync(
+            Guid ownerUserId,
+            CategoryType categoryType,
+            string name,
+            Guid? exceptCategoryId = null,
+            CancellationToken cancellationToken = default)
+        {
+            // Filters off: the index spans all of the owner's categories, including any the
+            // caller cannot see — a housemate renaming someone else's category, say.
+            return await _context.Categories.IgnoreQueryFilters()
+                .AnyAsync(c => c.UserId == ownerUserId
+                               && c.CategoryType == categoryType
+                               && c.Name == name
+                               && c.Id != exceptCategoryId,
+                    cancellationToken);
+        }
     }
 }
